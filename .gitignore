@@ -1,0 +1,41 @@
+# OpenYida / Codex cache
+.cache/
+.playwright-cli/
+
+# Build outputs
+pages/build/
+pages/dist/
+dist/
+build/
+
+# Test / browser outputs
+output/
+playwright-report/
+test-results/
+
+# Dependencies
+node_modules/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Duplicate exported archive
+figma/*.zip
+
+# Local meeting materials
+06-02 客户关系管理系统功能评审.*
+纪要_06-02 客户关系管理系统功能评审.md
