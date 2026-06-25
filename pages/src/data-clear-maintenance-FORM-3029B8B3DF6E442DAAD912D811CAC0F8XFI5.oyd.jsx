@@ -53,6 +53,7 @@ var BUSINESS_FORMS = [{
   formUuid: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8'
 }];
 var _customState = {
+  accessDenied: false,
   scanning: false,
   running: false,
   progress: '',
@@ -81,10 +82,66 @@ export function forceUpdate() {
 }
 
 export function didMount() {
+  if (this.denyNormalEmployeeAccess()) return;
   this.scanData();
 }
 
 export function didUnmount() {}
+
+export function getLoginRoleTexts() {
+  var values = [];
+  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  function collect(value) {
+    if (!value) return;
+    if (typeof value === 'string') {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(item => collect(item));
+      return;
+    }
+    if (typeof value === 'object') {
+      collect(value.name);
+      collect(value.title);
+      collect(value.roleName);
+      collect(value.roleNames);
+      collect(value.groupName);
+      collect(value.groupNames);
+    }
+  }
+  collect(user.roleName);
+  collect(user.roleNames);
+  collect(user.roles);
+  collect(user.roleList);
+  collect(user.roleGroups);
+  collect(user.groupName);
+  collect(user.groupNames);
+  collect(user.groups);
+  collect(user.ext);
+  return values.join(' ');
+}
+
+export function isNormalEmployeeRole() {
+  var roleText = this.getLoginRoleTexts();
+  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+}
+
+export function denyNormalEmployeeAccess() {
+  if (!this.isNormalEmployeeRole()) return false;
+  _customState.accessDenied = true;
+  _customState.scanning = false;
+  _customState.running = false;
+  this.forceUpdate();
+  return true;
+}
+
+export function renderAccessDenied() {
+  return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
+      <div style={{ fontSize: '20px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>暂无查看权限</div>
+      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>数据清空维护仅开放给“市场信息管理 / 总经理办”。</div>
+    </div>;
+}
 
 export function buildEmptyPlan(statusText) {
   return BUSINESS_FORMS.map(item => {
@@ -410,6 +467,12 @@ export function renderJsx() {
   var self = this;
   var timestamp = this.state && this.state.timestamp;
   var isMobile = this.utils.isMobile();
+  if (_customState.accessDenied) {
+    return <div style={styles.page}>
+        <div style={{ display: 'none' }}>{timestamp}</div>
+        {this.renderAccessDenied()}
+      </div>;
+  }
   var total = this.getTotalCount();
   var handled = this.getHandledCount();
   var disabled = _customState.scanning || _customState.running;

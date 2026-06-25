@@ -28,6 +28,7 @@ var METHOD_OPTIONS = ['全部', '上门', '电话', '饭局', '会议', '培训�
 var _customState = {
   loading: true,
   error: '',
+  accessDenied: false,
   keyword: '',
   methodFilter: '全部',
   sortBy: 'time',
@@ -53,8 +54,60 @@ export function forceUpdate() {
     timestamp: new Date().getTime()
   });
 }
+export function getLoginRoleTexts() {
+  var values = [];
+  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  function collect(value) {
+    if (!value) return;
+    if (typeof value === 'string') {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(item => collect(item));
+      return;
+    }
+    if (typeof value === 'object') {
+      collect(value.name);
+      collect(value.title);
+      collect(value.roleName);
+      collect(value.roleNames);
+      collect(value.groupName);
+      collect(value.groupNames);
+    }
+  }
+  collect(user.roleName);
+  collect(user.roleNames);
+  collect(user.roles);
+  collect(user.roleList);
+  collect(user.roleGroups);
+  collect(user.groupName);
+  collect(user.groupNames);
+  collect(user.groups);
+  collect(user.ext);
+  return values.join(' ');
+}
+export function isNormalEmployeeRole() {
+  var roleText = this.getLoginRoleTexts();
+  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+}
+export function denyNormalEmployeeAccess() {
+  if (!this.isNormalEmployeeRole()) return false;
+  _customState.accessDenied = true;
+  _customState.loading = false;
+  _customState.error = '';
+  this.forceUpdate();
+  return true;
+}
+export function renderAccessDenied() {
+  return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
+      <div style={{ fontSize: '20px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>暂无查看权限</div>
+      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>拜访记录列表仅开放给“市场信息管理 / 总经理办”。普通员工可在普通员工首页提交拜访线索，提交后不可回看。</div>
+    </div>;
+}
 export function didMount() {
   var self = this;
+  if (this.denyNormalEmployeeAccess()) return;
   this.loadVisits(true);
   _customState.refreshTimer = setInterval(() => {
     self.loadVisits(false);
@@ -979,6 +1032,12 @@ var styles = {
 export function renderJsx() {
   var timestamp = this.state && this.state.timestamp;
   var isMobile = this.utils.isMobile();
+  if (_customState.accessDenied) {
+    return <div style={styles.page}>
+        <div style={{ display: 'none' }}>{timestamp}</div>
+        {this.renderAccessDenied()}
+      </div>;
+  }
   return <div style={styles.page}>
       <div style={{
       display: 'none'

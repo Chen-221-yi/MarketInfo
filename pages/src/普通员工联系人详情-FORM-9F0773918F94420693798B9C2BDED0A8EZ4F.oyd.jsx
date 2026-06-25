@@ -1,4 +1,4 @@
-// 联系人详情 - 自定义页面
+// 普通员工联系人详情 - 自定义页面
 
 var APP_TYPE = 'APP_LC7BU43GCVLSI0TH8POE';
 var FORMS = {
@@ -222,7 +222,6 @@ var TAB_ITEMS = [{
 var _customState = {
   loading: true,
   error: '',
-  accessDenied: false,
   contactId: '',
   activeTab: 'basic',
   contacts: [],
@@ -261,59 +260,7 @@ export function forceUpdate() {
     timestamp: new Date().getTime()
   });
 }
-export function getLoginRoleTexts() {
-  var values = [];
-  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
-  function collect(value) {
-    if (!value) return;
-    if (typeof value === 'string') {
-      values.push(value);
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach(item => collect(item));
-      return;
-    }
-    if (typeof value === 'object') {
-      collect(value.name);
-      collect(value.title);
-      collect(value.roleName);
-      collect(value.roleNames);
-      collect(value.groupName);
-      collect(value.groupNames);
-    }
-  }
-  collect(user.roleName);
-  collect(user.roleNames);
-  collect(user.roles);
-  collect(user.roleList);
-  collect(user.roleGroups);
-  collect(user.groupName);
-  collect(user.groupNames);
-  collect(user.groups);
-  collect(user.ext);
-  return values.join(' ');
-}
-export function isNormalEmployeeRole() {
-  var roleText = this.getLoginRoleTexts();
-  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
-}
-export function denyNormalEmployeeAccess() {
-  if (!this.isNormalEmployeeRole()) return false;
-  _customState.accessDenied = true;
-  _customState.loading = false;
-  _customState.error = '';
-  this.forceUpdate();
-  return true;
-}
-export function renderAccessDenied() {
-  return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
-      <div style={{ fontSize: '20px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>暂无查看权限</div>
-      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>联系人完整详情仅开放给“市场信息管理 / 总经理办”。普通员工首页只展示基础可见信息。</div>
-    </div>;
-}
 export function didMount() {
-  if (this.denyNormalEmployeeAccess()) return;
   _customState.contactId = this.getUrlParam('contactId') || this.getUrlParam('formInstId') || this.getUrlParam('id') || '';
   this.loadData();
 }
@@ -322,7 +269,7 @@ export function loadData() {
   _customState.loading = true;
   _customState.error = '';
   this.forceUpdate();
-  Promise.all([self.loadForm(FORMS.contact, 'contacts'), self.loadForm(FORMS.unit, 'units'), self.loadForm(FORMS.project, 'projects'), self.loadForm(FORMS.visit, 'visits'), self.loadForm(FORMS.career, 'careers'), self.loadForm(FORMS.relation, 'relations'), self.loadForm(FORMS.reminder, 'reminders'), self.loadForm(FORMS.intel, 'intel'), self.loadForm(FORMS.album, 'albums'), self.loadForm(FORMS.tagConfig, 'tagConfigs'), self.loadForm(FORMS.privateProfile, 'privateProfiles'), self.loadForm(FORMS.socialRelation, 'socialRelations')]).then(() => {
+  Promise.all([self.loadForm(FORMS.contact, 'contacts'), self.loadForm(FORMS.unit, 'units')]).then(() => {
     if (!_customState.contactId && _customState.contacts.length) {
       _customState.contactId = self.getRowId(_customState.contacts[0]);
     }
@@ -1557,6 +1504,10 @@ export function openVisitForm() {
   }
   this.openSubmissionForm(FORMS.visit, params);
 }
+export function openAlbumForm() {
+  var contact = this.getContact();
+  this.openSubmissionForm(FORMS.album, this.getContactOpenParams(contact));
+}
 export function openVisitDetail(row) {
   var id = this.getRowId(row);
   if (!id) return;
@@ -1622,38 +1573,7 @@ export function getContactOpenParams(contact) {
 }
 export function openPrivateProfileForm() {
   var contact = this.getContact();
-  var profile = this.getCurrentPrivateProfile(contact);
-  var id = this.getRowId(profile);
-  if (id) {
-    this.openNativeEditForm(FORMS.privateProfile, id);
-    return;
-  }
-  if (!contact || !this.getRowId(contact) || _customState.privateProfileSaving) return;
-  var payload = {};
-  payload[FIELDS.privateProfile.contact] = this.buildContactAssociation(contact);
-  payload[FIELDS.privateProfile.permission] = '授权';
-  _customState.privateProfileSaving = true;
-  this.forceUpdate();
-  this.utils.yida.saveFormData({
-    appType: APP_TYPE,
-    formUuid: FORMS.privateProfile,
-    formDataJson: JSON.stringify(payload)
-  }).then(() => {
-    return this.loadForm(FORMS.privateProfile, 'privateProfiles');
-  }).then(() => {
-    _customState.privateProfileSaving = false;
-    this.forceUpdate();
-    var created = this.getCurrentPrivateProfile(contact);
-    var createdId = this.getRowId(created);
-    if (createdId) this.openNativeEditForm(FORMS.privateProfile, createdId);
-  }).catch(error => {
-    _customState.privateProfileSaving = false;
-    this.forceUpdate();
-    this.utils.toast({
-      title: this.getErrorMessage(error) || '私密画像创建失败',
-      type: 'error'
-    });
-  });
+  this.openSubmissionForm(FORMS.privateProfile, this.getContactOpenParams(contact));
 }
 export function openSocialRelationForm() {
   var contact = this.getContact();
@@ -1821,16 +1741,11 @@ export function renderMissingSuggestionCard(contact, isMobile) {
     </div>;
 }
 export function renderTags(contact) {
-  var self = this;
   var list = this.getContactTags(contact);
   return <div style={styles.tagBlock}>
       <div style={styles.tagList}>
         {list.length ? list.slice(0, 8).map(tag => <span key={tag} style={styles.tag}>{tag}</span>) : <span style={styles.emptyTagText}>暂无标签</span>}
-        <button onClick={e => {
-        self.openTagEditor();
-      }} style={styles.tagManageButton}>+ 管理标签</button>
       </div>
-      {_customState.tagEditorOpen && this.renderTagEditor(contact)}
     </div>;
 }
 export function renderTagEditor(contact) {
@@ -2017,9 +1932,6 @@ export function renderProfileHeader(contact, isMobile) {
           <div style={styles.actions}>
             {this.renderButton('记录拜访', 'primary', e => {
           this.openVisitForm();
-        })}
-            {this.renderButton('编辑', 'default', e => {
-          this.editContact();
         })}
           </div>
         </div>
@@ -2499,15 +2411,74 @@ export function renderIntelTab(contact) {
         </div>) : this.renderEmpty('暂无情报线索')}
     </div>;
 }
+export function getEntryTabConfig(key) {
+  if (key === 'album') return {
+    title: '相册',
+    action: '上传照片',
+    note: '普通员工仅可新增相册资料，不展示已有相册内容。',
+    handler: 'openAlbumForm'
+  };
+  if (key === 'career') return {
+    title: '任职履历',
+    action: '添加履历',
+    note: '普通员工仅可新增任职履历，不展示已有履历内容。',
+    handler: 'openCareerForm'
+  };
+  if (key === 'profile') return {
+    title: '私密画像',
+    action: '新增画像',
+    note: '普通员工仅可新增画像线索，不展示已有私密画像。',
+    handler: 'openPrivateProfileForm'
+  };
+  if (key === 'social') return {
+    title: '社会关系',
+    action: '添加关系',
+    note: '普通员工仅可新增社会关系线索，不展示已有社会关系。',
+    handler: 'openSocialRelationForm'
+  };
+  if (key === 'visits') return {
+    title: '拜访记录',
+    action: '记录拜访',
+    note: '普通员工仅可提交拜访记录，提交后不提供回看入口。',
+    handler: 'openVisitForm'
+  };
+  if (key === 'projects') return {
+    title: '关联项目',
+    action: '关联项目',
+    note: '普通员工仅可新增项目联系人关系，不展示已有关联项目。',
+    handler: 'openRelationForm'
+  };
+  if (key === 'dates') return {
+    title: '重要日期',
+    action: '添加日期',
+    note: '普通员工仅可新增重要日期提醒，不展示已有日期内容。',
+    handler: 'openReminderForm'
+  };
+  return {
+    title: '情报线索',
+    action: '添加线索',
+    note: '普通员工仅可新增情报线索，提交后不提供回看入口。',
+    handler: 'openIntelForm'
+  };
+}
+export function renderEntryOnlyTab(contact, key) {
+  var self = this;
+  var config = this.getEntryTabConfig(key);
+  return <div style={styles.stack}>
+      {this.renderTabHeader(config.title, config.action, e => {
+      self[config.handler]();
+    }, true)}
+      <div style={{ padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
+        <div style={{ fontSize: '16px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>{config.title}仅开放新增入口</div>
+        <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px', marginBottom: '18px' }}>{config.note}</div>
+        <button style={styles.inlineAction} onClick={e => {
+        self[config.handler]();
+      }}><span style={styles.inlineActionIcon}>+</span>{config.action}</button>
+      </div>
+    </div>;
+}
 export function renderTabContent(contact, isMobile) {
-  if (_customState.activeTab === 'career') return this.renderCareerTab(contact);
-  if (_customState.activeTab === 'album') return this.renderAlbumTab(contact, isMobile);
-  if (_customState.activeTab === 'profile') return this.renderProfileTab(contact);
-  if (_customState.activeTab === 'social') return this.renderSocialTab(contact);
-  if (_customState.activeTab === 'visits') return this.renderVisitsTab(contact);
-  if (_customState.activeTab === 'projects') return this.renderProjectsTab(contact);
-  if (_customState.activeTab === 'dates') return this.renderDatesTab(contact);
-  if (_customState.activeTab === 'intel') return this.renderIntelTab(contact);
+  if (_customState.activeTab !== 'basic') return this.renderEntryOnlyTab(contact, _customState.activeTab);
   return this.renderBasicTab(contact, isMobile);
 }
 var styles = {
@@ -4085,12 +4056,6 @@ export function renderJsx() {
   var timestamp = this.state && this.state.timestamp;
   var isMobile = this.utils.isMobile();
   var contact = this.getContact();
-  if (_customState.accessDenied) {
-    return <div style={styles.page}>
-        <div style={{ display: 'none' }}>{timestamp}</div>
-        {this.renderAccessDenied()}
-      </div>;
-  }
   return <div style={styles.page}>
       <div style={{
       display: 'none'

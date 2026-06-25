@@ -1751,8 +1751,8 @@ export function renderCompletenessItem(item) {
         <div style={styles.completionLine}>
           <div style={styles.progressTrack}>
             <div style={Object.assign({}, styles.progressBar, barStyle, {
-          width: value + '%'
-        })}></div>
+            width: value + '%'
+          })}></div>
           </div>
           <span style={styles.completionPercent}>{value}%</span>
         </div>

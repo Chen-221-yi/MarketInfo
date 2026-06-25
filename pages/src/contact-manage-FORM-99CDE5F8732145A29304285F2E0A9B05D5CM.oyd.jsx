@@ -110,6 +110,7 @@ var FIELDS = {
 var _customState = {
   loading: true,
   error: '',
+  accessDenied: false,
   keyword: '',
   showFilters: false,
   visitFilter: '全部',
@@ -150,6 +151,57 @@ export function forceUpdate() {
     timestamp: new Date().getTime()
   });
 }
+export function getLoginRoleTexts() {
+  var values = [];
+  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  function collect(value) {
+    if (!value) return;
+    if (typeof value === 'string') {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(item => collect(item));
+      return;
+    }
+    if (typeof value === 'object') {
+      collect(value.name);
+      collect(value.title);
+      collect(value.roleName);
+      collect(value.roleNames);
+      collect(value.groupName);
+      collect(value.groupNames);
+    }
+  }
+  collect(user.roleName);
+  collect(user.roleNames);
+  collect(user.roles);
+  collect(user.roleList);
+  collect(user.roleGroups);
+  collect(user.groupName);
+  collect(user.groupNames);
+  collect(user.groups);
+  collect(user.ext);
+  return values.join(' ');
+}
+export function isNormalEmployeeRole() {
+  var roleText = this.getLoginRoleTexts();
+  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+}
+export function denyNormalEmployeeAccess() {
+  if (!this.isNormalEmployeeRole()) return false;
+  _customState.accessDenied = true;
+  _customState.loading = false;
+  _customState.error = '';
+  this.forceUpdate();
+  return true;
+}
+export function renderAccessDenied() {
+  return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
+      <div style={{ fontSize: '20px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>暂无查看权限</div>
+      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>当前完整管理页仅开放给“市场信息管理 / 总经理办”。普通员工请使用普通员工首页查看基础信息或提交线索。</div>
+    </div>;
+}
 export function getUrlParam(name) {
   var params = this.state && this.state.urlParams || {};
   if (params && params[name]) return params[name];
@@ -175,6 +227,7 @@ export function applyRouteParams() {
 }
 export function didMount() {
   var self = this;
+  if (this.denyNormalEmployeeAccess()) return;
   this.applyRouteParams();
   this.loadData(true);
   _customState.refreshTimer = setInterval(() => {
@@ -2337,6 +2390,12 @@ var styles = {
 export function renderJsx() {
   var timestamp = this.state && this.state.timestamp;
   var isMobile = this.utils.isMobile();
+  if (_customState.accessDenied) {
+    return <div style={styles.page}>
+        <div style={{ display: 'none' }}>{timestamp}</div>
+        {this.renderAccessDenied()}
+      </div>;
+  }
   return <div style={styles.page}>
       <div style={{
       display: 'none'
