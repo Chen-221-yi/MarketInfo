@@ -1358,10 +1358,44 @@ export function renderBadge(text, toneName) {
   })}>{text || '-'}</span>;
 }
 export function renderVisitBadge(text) {
-  var success = text === '电话';
+  var colors = {
+    door: {
+      bg: '#FEF3F2',
+      color: '#B42318',
+      border: '#FECDCA'
+    },
+    wechat: {
+      bg: '#E0F2FE',
+      color: '#026AA2',
+      border: '#BAE6FD'
+    },
+    warning: {
+      bg: '#FFF7E6',
+      color: '#B54708',
+      border: '#FEDF89'
+    },
+    purple: {
+      bg: '#F4EBFF',
+      color: '#6941C6',
+      border: '#E9D7FE'
+    },
+    phone: {
+      bg: '#F2F4F7',
+      color: '#475467',
+      border: '#EAECF0'
+    },
+    default: {
+      bg: '#EAF2FF',
+      color: '#155EEF',
+      border: '#D6E8FF'
+    }
+  };
+  var toneName = text === '上门' ? 'door' : text === '微信' ? 'wechat' : text === '电话' ? 'phone' : text === '饭局' || text === '活动' ? 'warning' : text === '会议' || text === '培训会' ? 'purple' : 'default';
+  var c = colors[toneName];
   return <span style={Object.assign({}, styles.visitBadge, {
-    background: success ? '#DCFCE7' : '#EAF2FF',
-    color: success ? '#027A48' : '#155EEF'
+    background: c.bg,
+    color: c.color,
+    border: '1px solid ' + c.border
   })}>{text || '-'}</span>;
 }
 export function renderButton(label, type, onClick) {

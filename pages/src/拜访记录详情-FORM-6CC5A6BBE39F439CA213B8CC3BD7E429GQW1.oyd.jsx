@@ -451,9 +451,6 @@ export function buildIntelPayload(row) {
   if (!title) return {
     error: '请填写情报标题'
   };
-  if (!content) return {
-    error: '请填写情报内容'
-  };
   if (!validUntil) return {
     error: '请选择有效期截止日期'
   };
@@ -767,6 +764,10 @@ export function renderIntelCard(row) {
   var remindDate = this.formatDate(this.rawValue(row, FIELDS.intel.remindDate));
   var project = this.getAssociationText(row, FIELDS.intel.project);
   var projectText = project;
+  var content = this.getValue(row, FIELDS.intel.content);
+  var visit = this.getVisit();
+  var sourceContent = visit ? this.getValue(visit, FIELDS.visit.content) : '-';
+  var contentText = content !== '-' ? content : sourceContent !== '-' ? '来源交流摘要：' + sourceContent : '暂无线索说明';
   var expired = this.isIntelOverdue(row);
   var remindDue = this.isIntelReminderDue(row);
   return <div key={this.getRowId(row)} style={styles.intelCard}>
@@ -786,7 +787,7 @@ export function renderIntelCard(row) {
         <div style={styles.intelMetaItem}><span>提醒</span><strong>{remindDate}</strong></div>
         <div style={styles.intelMetaItem}><span>负责人</span><strong>{this.getValue(row, FIELDS.intel.owner)}</strong></div>
       </div>
-      <div style={styles.intelContent}>{this.getValue(row, FIELDS.intel.content)}</div>
+      <div style={styles.intelContent}>{contentText}</div>
       {this.getValue(row, FIELDS.intel.nextAction) !== '-' && <div style={styles.intelNext}>下一步：{this.getValue(row, FIELDS.intel.nextAction)}</div>}
       <div style={styles.intelActions}>
         {this.renderButton('查看', 'default', e => {
@@ -854,10 +855,10 @@ export function renderIntelDrawer(row) {
           }} />
           </div>
           <div style={styles.fieldWide}>
-            <label style={styles.fieldLabel}>情报内容</label>
+            <label style={styles.fieldLabel}>线索说明（选填）</label>
             <textarea id="visit-intel-content" style={styles.textarea} defaultValue={_customState.intelDraft.content} onChange={e => {
             this.handleIntelDraftChange('content', e);
-          }} />
+          }} placeholder="仅当线索与本次交流内容不能对应时补充，避免重复填写交流内容" />
           </div>
           <div style={styles.fieldWide}>
             <label style={styles.fieldLabel}>下一步动作</label>

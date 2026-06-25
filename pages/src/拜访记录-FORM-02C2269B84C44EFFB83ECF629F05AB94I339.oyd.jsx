@@ -370,7 +370,9 @@ export function openDetail(row) {
   }, false);
 }
 export function methodTone(method) {
-  if (method === '电话' || method === '微信') return 'success';
+  if (method === '上门') return 'door';
+  if (method === '微信') return 'wechat';
+  if (method === '电话') return 'default';
   if (method === '饭局' || method === '活动') return 'warning';
   if (method === '会议' || method === '培训会') return 'purple';
   return 'primary';
@@ -421,6 +423,16 @@ export function renderBadge(text, toneName) {
       bg: '#FEF3F2',
       color: '#B42318',
       border: '#FECDCA'
+    },
+    door: {
+      bg: '#FEF3F2',
+      color: '#B42318',
+      border: '#FECDCA'
+    },
+    wechat: {
+      bg: '#E0F2FE',
+      color: '#026AA2',
+      border: '#BAE6FD'
     },
     purple: {
       bg: '#F4EBFF',
