@@ -19,7 +19,10 @@ var FIELDS = {
     contact: 'associationFormField_kyv33bc8s',
     unit: 'associationFormField_2yle119gl',
     project: 'associationFormField_kyv35uxhy',
+    lead: 'associationFormField_o2e81pniy',
     people: 'employeeField_kyv36zyqq',
+    watchers: 'employeeField_o2e82mhmy',
+    handlers: 'employeeField_o2e83lzlv',
     method: 'selectField_kyv378rc2',
     time: 'dateField_kyv38g8dw',
     place: 'textField_kyv390cmy',
@@ -35,9 +38,11 @@ var FIELDS = {
     serial: 'serialNumberField_o5hf11mwc',
     contact: 'associationFormField_o5hf21sgj',
     project: 'associationFormField_o5hf3lnak',
+    unit: 'associationFormField_nnet1kq13',
     category: 'selectField_o5hf4u689',
     title: 'textField_o5hf51ir9',
     content: 'textareaField_o5hf6dkbq',
+    importance: 'selectField_mq4vrff2',
     sourceType: 'selectField_o5hf88jri',
     status: 'selectField_o5hfbq4tf',
     permission: 'selectField_o5hfdjolr',
@@ -50,6 +55,8 @@ var FIELDS = {
     validUntil: 'dateField_5szd5xzdb',
     remindDate: 'dateField_5szd6vvxq',
     owner: 'employeeField_5szd78u2t',
+    handlers: 'employeeField_nnet2xu74',
+    watchers: 'employeeField_nnet3hm2v',
     nextAction: 'textareaField_5szd8976q'
   }
 };
@@ -67,17 +74,29 @@ var _customState = {
     title: '',
     content: '',
     category: '项目线索',
+    importance: '中',
     expectedTime: '',
     validUntil: '',
     remindDate: '',
     nextAction: ''
   }
 };
+export function getCustomState(key) {
+  if (key) return _customState[key];
+  return _.clone(_customState);
+}
+export function setCustomState(newState) {
+  Object.keys(newState).forEach(key => {
+    _customState[key] = newState[key];
+  });
+  this.forceUpdate();
+}
 export function forceUpdate() {
   this.setState({
     timestamp: new Date().getTime()
   });
 }
+export function didUnmount() {}
 export function getLoginRoleTexts() {
   var values = [];
   var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
@@ -318,6 +337,10 @@ export function getAssociationIds(value) {
     return item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
   }).filter(id => id);
 }
+export function getAssociationFirstItem(value) {
+  var items = this.getAssociationItems(value);
+  return items[0] || null;
+}
 export function rowMatchesAssociation(row, fieldId, id) {
   if (!id) return false;
   return this.getAssociationIds(this.rawAssociation(row, fieldId)).indexOf(id) >= 0;
@@ -327,8 +350,33 @@ export function getAttachmentItems(row) {
 }
 export function getRelatedIntel(row) {
   var visitId = this.getRowId(row);
-  var list = (_customState.intel || []).filter(item => this.rowMatchesAssociation(item, FIELDS.intel.visit, visitId));
-  list = list.slice(0);
+  var leadIds = this.getAssociationIds(this.rawAssociation(row, FIELDS.visit.lead));
+  var exists = {};
+  var list = [];
+  (_customState.intel || []).forEach(item => {
+    var id = this.getRowId(item);
+    var fromVisit = this.rowMatchesAssociation(item, FIELDS.intel.visit, visitId);
+    var fromLinked = leadIds.indexOf(id) >= 0;
+    if (!fromVisit && !fromLinked) return;
+    if (exists[id]) return;
+    exists[id] = true;
+    var copied = Object.assign({}, item);
+    copied.__relationSource = fromVisit ? '来源拜访记录' : '拜访记录关联线索';
+    list.push(copied);
+  });
+  this.getAssociationItems(this.rawAssociation(row, FIELDS.visit.lead)).forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    var id = item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
+    if (!id || exists[id]) return;
+    exists[id] = true;
+    var formData = {};
+    formData[FIELDS.intel.title] = item.title || item.name || item.label || item.text || '已关联市场线索';
+    list.push({
+      formInstId: id,
+      formData: formData,
+      __relationSource: '拜访记录关联线索'
+    });
+  });
   list.sort((a, b) => {
     var ad = Number(this.rawValue(a, FIELDS.intel.remindDate)) || Number(this.rawValue(a, FIELDS.intel.validUntil)) || Number(this.rawValue(a, FIELDS.intel.recordTime)) || 0;
     var bd = Number(this.rawValue(b, FIELDS.intel.remindDate)) || Number(this.rawValue(b, FIELDS.intel.validUntil)) || Number(this.rawValue(b, FIELDS.intel.recordTime)) || 0;
@@ -342,7 +390,7 @@ export function getTodayStart() {
 }
 export function isClosedIntel(row) {
   var status = this.getValue(row, FIELDS.intel.status);
-  return status === '已转项目' || status === '已归档';
+  return status === '已转项目' || status === '已关闭' || status === '已归档';
 }
 export function isIntelOverdue(row) {
   var validUntil = Number(this.rawValue(row, FIELDS.intel.validUntil)) || 0;
@@ -358,7 +406,7 @@ export function getIntelTone(row) {
   if (this.isIntelReminderDue(row)) return 'warning';
   if (status === '已转项目') return 'success';
   if (status === '跟进中') return 'primary';
-  if (status === '已归档') return 'default';
+  if (status === '已关闭' || status === '已归档') return 'default';
   return 'warning';
 }
 export function getLoginUserId() {
@@ -399,6 +447,7 @@ export function resetIntelDraft() {
     title: '',
     content: '',
     category: '项目线索',
+    importance: '中',
     expectedTime: '',
     validUntil: '',
     remindDate: '',
@@ -406,9 +455,7 @@ export function resetIntelDraft() {
   };
 }
 export function openIntelDrawer() {
-  this.resetIntelDraft();
-  _customState.intelDrawerOpen = true;
-  this.forceUpdate();
+  this.openIntelNativeSubmission();
 }
 export function closeIntelDrawer() {
   if (_customState.intelSaving) return;
@@ -421,6 +468,10 @@ export function handleIntelDraftChange(key, e) {
 }
 export function setIntelCategory(category) {
   _customState.intelDraft.category = category;
+  this.forceUpdate();
+}
+export function setIntelImportance(importance) {
+  _customState.intelDraft.importance = importance;
   this.forceUpdate();
 }
 export function getDraftInputValue(key) {
@@ -440,84 +491,100 @@ export function parseDateInput(value) {
   if (!year || !month || !day) return 0;
   return new Date(year, month - 1, day).getTime();
 }
-export function buildIntelPayload(row) {
-  var title = this.getDraftInputValue('title').trim();
-  var content = this.getDraftInputValue('content').trim();
-  var category = this.getDraftInputValue('category') || '项目线索';
-  var expectedTime = this.getDraftInputValue('expectedTime').trim();
-  var validUntil = this.parseDateInput(this.getDraftInputValue('validUntil'));
-  var remindDate = this.parseDateInput(this.getDraftInputValue('remindDate'));
-  var nextAction = this.getDraftInputValue('nextAction').trim();
-  if (!title) return {
-    error: '请填写情报标题'
-  };
-  if (!validUntil) return {
-    error: '请选择有效期截止日期'
-  };
-  if (!remindDate) return {
-    error: '请选择提醒日期'
-  };
-  var payload = {};
-  var userId = this.getLoginUserId();
-  payload[FIELDS.intel.title] = title;
-  payload[FIELDS.intel.content] = content;
-  payload[FIELDS.intel.category] = category;
-  payload[FIELDS.intel.sourceType] = '拜访获得';
-  payload[FIELDS.intel.status] = '待跟进';
-  payload[FIELDS.intel.entryType] = '拜访生成';
-  payload[FIELDS.intel.validUntil] = validUntil;
-  payload[FIELDS.intel.remindDate] = remindDate;
-  payload[FIELDS.intel.expectedTime] = expectedTime;
-  payload[FIELDS.intel.nextAction] = nextAction;
-  payload[FIELDS.intel.visit] = this.buildVisitAssociation(row);
-  payload[FIELDS.intel.contact] = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.contact), FORMS.contact, this.getAssociationText(row, FIELDS.visit.contact));
-  var projectPayload = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.project), FORMS.project, this.getAssociationText(row, FIELDS.visit.project));
-  if (projectPayload.length) payload[FIELDS.intel.project] = projectPayload;
-  payload[FIELDS.intel.permission] = '内部';
-  var auth = this.rawValue(row, FIELDS.visit.auth);
-  if (auth) payload[FIELDS.intel.auth] = auth;
-  if (userId) {
-    payload[FIELDS.intel.owner] = [String(userId)];
-    payload[FIELDS.intel.recorder] = [String(userId)];
-  }
-  payload[FIELDS.intel.recordTime] = new Date().getTime();
-  return {
-    payload: payload
-  };
+export function addDays(time, days) {
+  return time + days * 24 * 60 * 60 * 1000;
 }
-export function submitIntelLead() {
-  var row = this.getVisit();
-  if (!row || _customState.intelSaving) return;
-  var result = this.buildIntelPayload(row);
-  if (result.error) {
-    this.utils.toast({
-      title: result.error,
-      type: 'error'
-    });
+export function normalizeTextValue(value, fallback) {
+  if (value === undefined || value === null || value === '' || value === '-') return fallback || '';
+  return value;
+}
+export function buildPrefilledIntelPayload(row) {
+  var payload = {};
+  var today = this.getTodayStart();
+  var nextDate = Number(this.rawValue(row, FIELDS.visit.nextDate)) || 0;
+  var visitContent = this.normalizeTextValue(this.getValue(row, FIELDS.visit.content), '由拜访记录生成，待补充线索内容');
+  var nextAction = this.normalizeTextValue(this.getValue(row, FIELDS.visit.nextAction), '');
+  var contact = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.contact), FORMS.contact, this.getAssociationText(row, FIELDS.visit.contact));
+  var unit = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.unit), FORMS.unit, this.getAssociationText(row, FIELDS.visit.unit));
+  var project = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.project), FORMS.project, this.getAssociationText(row, FIELDS.visit.project));
+  payload[FIELDS.intel.title] = this.getVisitTitle(row);
+  payload[FIELDS.intel.content] = visitContent;
+  payload[FIELDS.intel.category] = '项目线索';
+  payload[FIELDS.intel.importance] = '中';
+  payload[FIELDS.intel.status] = '待跟进';
+  payload[FIELDS.intel.sourceType] = '拜访获得';
+  payload[FIELDS.intel.entryType] = '拜访生成';
+  payload[FIELDS.intel.permission] = '内部';
+  payload[FIELDS.intel.nextAction] = nextAction;
+  payload[FIELDS.intel.remindDate] = nextDate || today;
+  payload[FIELDS.intel.validUntil] = nextDate && nextDate > today ? this.addDays(nextDate, 30) : this.addDays(today, 30);
+  payload[FIELDS.intel.recordTime] = new Date().getTime();
+  payload[FIELDS.intel.visit] = this.buildVisitAssociation(row);
+  if (contact.length) payload[FIELDS.intel.contact] = contact;
+  if (unit.length) payload[FIELDS.intel.unit] = unit;
+  if (project.length) payload[FIELDS.intel.project] = project;
+  return payload;
+}
+export function getSavedFormInstId(res) {
+  var body = res && (res.content || res.data || res.result || res) || {};
+  if (typeof body === 'string') return body;
+  return body.formInstId || body.formInstanceId || body.instanceId || body.id || body.formDataId || '';
+}
+export function findLatestIntelByVisit(row) {
+  var related = this.getRelatedIntel(row);
+  return related && related[0] || null;
+}
+export function openSavedIntelOrRefresh(row, formInstId) {
+  if (formInstId) {
+    this.openNativeEditForm(FORMS.intel, formInstId);
     return;
   }
+  this.loadIntelData().then(() => {
+    var latest = this.findLatestIntelByVisit(row);
+    var id = this.getRowId(latest);
+    if (id) {
+      this.openNativeEditForm(FORMS.intel, id);
+      return;
+    }
+    this.utils.toast({
+      title: '市场线索已生成，请刷新后查看',
+      type: 'success'
+    });
+    this.forceUpdate();
+  }).catch(() => {
+    this.utils.toast({
+      title: '市场线索已生成，请刷新后查看',
+      type: 'success'
+    });
+  });
+}
+export function openIntelNativeSubmission() {
+  var row = this.getVisit();
+  if (!row) return;
+  if (_customState.intelSaving) return;
   _customState.intelSaving = true;
   this.forceUpdate();
+  var payload = this.buildPrefilledIntelPayload(row);
+  this.utils.toast({
+    title: '正在生成预填市场线索',
+    type: 'notice'
+  });
   this.utils.yida.saveFormData({
     appType: APP_TYPE,
     formUuid: FORMS.intel,
-    formDataJson: JSON.stringify(result.payload)
-  }).then(() => {
-    return this.loadIntelData();
-  }).then(() => {
+    formDataJson: JSON.stringify(payload)
+  }).then(res => {
     _customState.intelSaving = false;
-    _customState.intelDrawerOpen = false;
-    this.resetIntelDraft();
-    this.forceUpdate();
     this.utils.toast({
-      title: '情报线索已生成',
+      title: '已生成预填草稿，请在原生表单中补充人员字段',
       type: 'success'
     });
-  }).catch(error => {
+    this.openSavedIntelOrRefresh(row, this.getSavedFormInstId(res));
+  }).catch(err => {
     _customState.intelSaving = false;
     this.forceUpdate();
     this.utils.toast({
-      title: this.getErrorMessage(error) || '情报线索保存失败',
+      title: '生成市场线索失败：' + this.getErrorMessage(err),
       type: 'error'
     });
   });
@@ -744,7 +811,7 @@ export function renderTabs() {
     label: '附件资料'
   }, {
     key: 'intel',
-    label: '情报线索'
+    label: '市场线索'
   }];
   return <div style={styles.tabs}>
       {tabs.map(tab => <button key={tab.key} style={Object.assign({}, styles.tab, _customState.activeTab === tab.key ? styles.tabActive : {})} onClick={e => {
@@ -760,32 +827,41 @@ export function renderAttachmentTab(row) {
 }
 export function renderIntelCard(row) {
   var status = this.getValue(row, FIELDS.intel.status);
+  var importance = this.getValue(row, FIELDS.intel.importance);
   var validUntil = this.formatDate(this.rawValue(row, FIELDS.intel.validUntil));
   var remindDate = this.formatDate(this.rawValue(row, FIELDS.intel.remindDate));
   var project = this.getAssociationText(row, FIELDS.intel.project);
   var projectText = project;
+  var handlers = this.getValue(row, FIELDS.intel.handlers);
+  var watchers = this.getValue(row, FIELDS.intel.watchers);
   var content = this.getValue(row, FIELDS.intel.content);
   var visit = this.getVisit();
   var sourceContent = visit ? this.getValue(visit, FIELDS.visit.content) : '-';
-  var contentText = content !== '-' ? content : sourceContent !== '-' ? '来源交流摘要：' + sourceContent : '暂无线索说明';
+  var contentText = content !== '-' ? content : sourceContent !== '-' ? '来源交流摘要：' + sourceContent : '暂无线索内容';
   var expired = this.isIntelOverdue(row);
   var remindDue = this.isIntelReminderDue(row);
   return <div key={this.getRowId(row)} style={styles.intelCard}>
       <div style={styles.intelCardHead}>
-        <div style={styles.intelCardTitle}>{this.getValue(row, FIELDS.intel.title)}</div>
+        <div style={styles.intelCardTitle} onClick={e => {
+        this.openIntelDetail(row);
+      }}>{this.getValue(row, FIELDS.intel.title)}</div>
         <div style={styles.intelBadges}>
+          {row.__relationSource && this.renderBadge(row.__relationSource, 'default')}
           {expired && this.renderBadge('已过期', 'danger')}
           {!expired && remindDue && this.renderBadge('待提醒', 'warning')}
           {this.renderBadge(status, this.getIntelTone(row))}
+          {importance !== '-' && this.renderBadge(importance, importance === '高' ? 'danger' : importance === '低' ? 'default' : 'warning')}
         </div>
       </div>
       <div style={styles.intelMetaGrid}>
-        <div style={styles.intelMetaItem}><span>分类</span><strong>{this.getValue(row, FIELDS.intel.category)}</strong></div>
-        <div style={styles.intelMetaItem}><span>项目</span><strong>{projectText !== '-' ? projectText : '未关联'}</strong></div>
+        <div style={styles.intelMetaItem}><span>线索类型</span><strong>{this.getValue(row, FIELDS.intel.category)}</strong></div>
+        <div style={styles.intelMetaItem}><span>主关联项目</span><strong>{projectText !== '-' ? projectText : '未关联'}</strong></div>
         <div style={styles.intelMetaItem}><span>预计时间</span><strong>{this.getValue(row, FIELDS.intel.expectedTime)}</strong></div>
-        <div style={styles.intelMetaItem}><span>有效期</span><strong>{validUntil}</strong></div>
+        <div style={styles.intelMetaItem}><span>有效截止</span><strong>{validUntil}</strong></div>
         <div style={styles.intelMetaItem}><span>提醒</span><strong>{remindDate}</strong></div>
-        <div style={styles.intelMetaItem}><span>负责人</span><strong>{this.getValue(row, FIELDS.intel.owner)}</strong></div>
+        <div style={styles.intelMetaItem}><span>线索负责人</span><strong>{this.getValue(row, FIELDS.intel.owner)}</strong></div>
+        <div style={styles.intelMetaItem}><span>跟进经办人</span><strong>{handlers !== '-' ? handlers : '未指定'}</strong></div>
+        <div style={styles.intelMetaItem}><span>关注人 / 必看人</span><strong>{watchers !== '-' ? watchers : '未指定'}</strong></div>
       </div>
       <div style={styles.intelContent}>{contentText}</div>
       {this.getValue(row, FIELDS.intel.nextAction) !== '-' && <div style={styles.intelNext}>下一步：{this.getValue(row, FIELDS.intel.nextAction)}</div>}
@@ -805,93 +881,29 @@ export function renderIntelCategoryChoice(label) {
       this.setIntelCategory(label);
     }}>{label}</button>;
 }
+export function renderIntelImportanceChoice(label) {
+  var active = _customState.intelDraft.importance === label;
+  return <button style={Object.assign({}, styles.categoryChoice, active ? styles.categoryChoiceActive : {})} onClick={e => {
+      this.setIntelImportance(label);
+    }}>{label}</button>;
+}
 export function renderIntelDrawer(row) {
-  if (!_customState.intelDrawerOpen) return null;
-  var isMobile = this.utils.isMobile();
-  return <div style={styles.drawerMask}>
-      <div style={isMobile ? styles.drawerMobile : styles.drawer}>
-        <div style={styles.drawerHead}>
-          <div>
-            <div style={styles.drawerTitle}>生成情报线索</div>
-            <div style={styles.drawerSub}>{this.getVisitTitle(row)}</div>
-          </div>
-          <button style={styles.drawerClose} onClick={e => {
-          this.closeIntelDrawer();
-        }}>×</button>
-        </div>
-        <div style={isMobile ? styles.formGridMobile : styles.formGrid}>
-          <div style={styles.fieldWide}>
-            <label style={styles.fieldLabel}>情报标题</label>
-            <input id="visit-intel-title" style={styles.input} defaultValue={_customState.intelDraft.title} onChange={e => {
-            this.handleIntelDraftChange('title', e);
-          }} />
-          </div>
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>情报分类</label>
-            <div style={styles.categoryRow}>
-              {this.renderIntelCategoryChoice('市场信息')}
-              {this.renderIntelCategoryChoice('项目线索')}
-              {this.renderIntelCategoryChoice('政策动向')}
-              {this.renderIntelCategoryChoice('招采节点')}
-              {this.renderIntelCategoryChoice('其他')}
-            </div>
-          </div>
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>预计发生时间</label>
-            <input id="visit-intel-expectedTime" style={styles.input} defaultValue={_customState.intelDraft.expectedTime} onChange={e => {
-            this.handleIntelDraftChange('expectedTime', e);
-          }} />
-          </div>
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>有效期截止日期</label>
-            <input id="visit-intel-validUntil" type="date" style={styles.input} defaultValue={_customState.intelDraft.validUntil} onChange={e => {
-            this.handleIntelDraftChange('validUntil', e);
-          }} />
-          </div>
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>提醒日期</label>
-            <input id="visit-intel-remindDate" type="date" style={styles.input} defaultValue={_customState.intelDraft.remindDate} onChange={e => {
-            this.handleIntelDraftChange('remindDate', e);
-          }} />
-          </div>
-          <div style={styles.fieldWide}>
-            <label style={styles.fieldLabel}>线索说明（选填）</label>
-            <textarea id="visit-intel-content" style={styles.textarea} defaultValue={_customState.intelDraft.content} onChange={e => {
-            this.handleIntelDraftChange('content', e);
-          }} placeholder="仅当线索与本次交流内容不能对应时补充，避免重复填写交流内容" />
-          </div>
-          <div style={styles.fieldWide}>
-            <label style={styles.fieldLabel}>下一步动作</label>
-            <textarea id="visit-intel-nextAction" style={styles.textareaSmall} defaultValue={_customState.intelDraft.nextAction} onChange={e => {
-            this.handleIntelDraftChange('nextAction', e);
-          }} />
-          </div>
-        </div>
-        <div style={styles.drawerActions}>
-          {this.renderButton('取消', 'default', e => {
-          this.closeIntelDrawer();
-        })}
-          {this.renderButton(_customState.intelSaving ? '保存中...' : '保存', 'primary', e => {
-          this.submitIntelLead();
-        })}
-        </div>
-      </div>
-    </div>;
+  return null;
 }
 export function renderIntelTab(row) {
   var intel = this.getRelatedIntel(row);
   return <div style={styles.panel}>
       <div style={styles.intelHead}>
         <div>
-          <h3 style={styles.sectionTitle}>情报线索（{intel.length}条）</h3>
-          <div style={styles.intelHeadSub}>来源拜访记录：{this.getVisitTitle(row)}</div>
+          <h3 style={styles.sectionTitle}>市场线索（{intel.length}条）</h3>
+          <div style={styles.intelHeadSub}>展示本次拜访生成的市场线索，以及拜访记录已关联的市场线索</div>
         </div>
-        {this.renderButton('+ 生成情报线索', 'primary', e => {
-        this.openIntelDrawer();
-      })}
+        {this.renderButton(_customState.intelSaving ? '生成中...' : '+ 生成市场线索', 'primary', e => {
+          this.openIntelDrawer();
+        })}
       </div>
       <div style={styles.intelList}>
-        {intel.length ? intel.map(item => this.renderIntelCard(item)) : this.renderEmpty('暂无情报线索')}
+        {intel.length ? intel.map(item => this.renderIntelCard(item)) : this.renderEmpty('暂无市场线索')}
       </div>
       {this.renderIntelDrawer(row)}
     </div>;

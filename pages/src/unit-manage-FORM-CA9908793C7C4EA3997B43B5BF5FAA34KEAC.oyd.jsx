@@ -4,6 +4,7 @@ var FORMS = {
   page: 'FORM-CA9908793C7C4EA3997B43B5BF5FAA34KEAC',
   unitDetail: 'FORM-4A90B63766D14A9798BD0B1DD1D32F9CMOZK',
   unit: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8',
+  regionDictionary: 'FORM-9817CBABC63B459AB71A1779C39E23804ST4',
   project: 'FORM-DC58D4D9EB714ACBB421A34ADFB418ABJCVO',
   contact: 'FORM-87B25B011DC14AA5ACC39BE4077D520AITQS'
 };
@@ -15,10 +16,25 @@ var FIELDS = {
     type: 'selectField_gqbk4xyoq',
     system: 'selectField_gqbk5upc2',
     region: 'addressField_mq52xi6b',
+    businessRegion: 'associationFormField_pfbg1n6ti',
     level: 'selectField_gqbk73418',
     address: 'addressField_gqbk80a21',
     business: 'textareaField_gqbk9dwrh',
     remark: 'textareaField_gqbkbwydj'
+  },
+  region: {
+    name: 'textField_mo8h1sjpw',
+    fullName: 'textField_mo8i2fsot',
+    parentFullName: 'textField_mo8i388ly',
+    level: 'selectField_mo8i46xcf',
+    isSelf: 'selectField_mo8i51eya',
+    mapName: 'textField_mo8i677rw',
+    longitude: 'numberField_mo8i7opxz',
+    latitude: 'numberField_mo8i8lg91',
+    mapLevel: 'selectField_mo8i9qnud',
+    mapEnabled: 'selectField_mo8ia4rxs',
+    sortNo: 'numberField_mo8ib7pyp',
+    status: 'selectField_mo8icww31'
   },
   project: {
     unit: 'associationFormField_jpjn5lpv8',
@@ -95,6 +111,7 @@ var _customState = {
   currentPage: 1,
   pageSize: 10,
   units: [],
+  regions: [],
   projects: [],
   contacts: [],
   totalUnits: 0,
@@ -472,7 +489,7 @@ export function loadData(showLoading) {
     _customState.error = '';
     this.forceUpdate();
   }
-  Promise.all([self.loadUnits(), self.loadLightForm(FORMS.project, 'projects'), self.loadLightForm(FORMS.contact, 'contacts')]).then(() => {
+  Promise.all([self.loadUnits(), self.loadLightForm(FORMS.regionDictionary, 'regions'), self.loadLightForm(FORMS.project, 'projects'), self.loadLightForm(FORMS.contact, 'contacts')]).then(() => {
     self.initializeDefaultExpandedGroups(self.buildRegionGroups(self.sortUnits(_customState.units)));
     _customState.loading = false;
     _customState.error = '';
@@ -689,7 +706,70 @@ export function getRegionCandidate(value) {
     codes: codes.slice(0, 3)
   };
 }
+export function findRegionById(id) {
+  if (!id) return null;
+  var matched = _customState.regions.filter(row => this.getRowId(row) === id);
+  return matched[0] || null;
+}
+export function findRegionByText(text) {
+  var value = String(text || '').trim();
+  if (!value || value === '-' || value === '--') return null;
+  var normalized = value.replace(/\s*\/\s*/g, ' / ');
+  var matched = _customState.regions.filter(row => {
+    return this.getValue(row, FIELDS.region.fullName) === normalized || this.getValue(row, FIELDS.region.name) === value;
+  });
+  return matched[0] || null;
+}
+export function getBusinessRegionRecord(row) {
+  var raw = this.rawValue(row, FIELDS.unit.businessRegion);
+  var parsed = this.parseMaybeJson(raw);
+  var item = Array.isArray(parsed) ? parsed[0] : parsed;
+  if (item && typeof item === 'object') {
+    var id = item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
+    var byId = this.findRegionById(id);
+    if (byId) return byId;
+    var text = this.formatValue(item);
+    var byText = this.findRegionByText(text);
+    if (byText) return byText;
+  }
+  var idValue = this.rawValue(row, FIELDS.unit.businessRegion + '_id');
+  var byIdValue = this.findRegionById(idValue);
+  if (byIdValue) return byIdValue;
+  return this.findRegionByText(this.formatValue(raw)) || this.findRegionByText(this.formatValue(idValue));
+}
+export function getBusinessRegionNormalized(row) {
+  var regionRow = this.getBusinessRegionRecord(row);
+  if (!regionRow) return null;
+  var fullName = this.getValue(regionRow, FIELDS.region.fullName);
+  var regionName = this.getValue(regionRow, FIELDS.region.name);
+  var parts = fullName && fullName !== '-' ? fullName.split(/\s*\/\s*/).filter(Boolean) : [regionName].filter(Boolean);
+  if (!parts.length) return null;
+  var provinceName = parts[0] || '';
+  var cityName = parts[1] || '';
+  var districtName = parts[2] || '';
+  var longitude = Number(this.rawValue(regionRow, FIELDS.region.longitude));
+  var latitude = Number(this.rawValue(regionRow, FIELDS.region.latitude));
+  var hasCoord = !isNaN(longitude) && !isNaN(latitude);
+  return {
+    provinceName: provinceName,
+    provinceCode: '',
+    cityName: cityName,
+    cityCode: '',
+    districtName: districtName,
+    districtCode: '',
+    fullRegionText: parts.join(' / '),
+    mapDisplayName: this.getValue(regionRow, FIELDS.region.mapName),
+    mapLevel: this.getValue(regionRow, FIELDS.region.mapLevel),
+    regionLevel: this.getValue(regionRow, FIELDS.region.level),
+    isSelfLevel: this.getValue(regionRow, FIELDS.region.isSelf) === '是',
+    longitude: hasCoord ? longitude : null,
+    latitude: hasCoord ? latitude : null,
+    classified: !!provinceName
+  };
+}
 export function getNormalizedRegion(row) {
+  var businessRegion = this.getBusinessRegionNormalized(row);
+  if (businessRegion) return businessRegion;
   var formData = this.getFormData(row);
   var directNames = [formData.provinceName || '', formData.cityName || '', formData.districtName || ''];
   var directCodes = [formData.provinceCode || '', formData.cityCode || '', formData.districtCode || ''].map(item => item === '' ? '' : String(item));
@@ -769,7 +849,12 @@ export function getRegionHierarchy(row) {
     cityKey: cityKey,
     districtKey: districtKey,
     regionKey: districtKey,
-    text: region.fullRegionText
+    text: region.fullRegionText,
+    mapDisplayName: region.mapDisplayName || '',
+    longitude: region.longitude,
+    latitude: region.latitude,
+    regionLevel: region.regionLevel || '',
+    isSelfLevel: region.isSelfLevel === true
   };
 }
 export function ensureGroup(map, list, key, label, level) {
@@ -977,7 +1062,8 @@ export function getMapRegionPoints() {
   var districtMap = {};
   this.getFilteredUnits(true).forEach(row => {
     var h = this.getRegionHierarchy(row);
-    var cityBase = REGION_COORDS[h.city] || REGION_COORDS[h.province];
+    var businessCoord = h.longitude !== null && h.longitude !== undefined && h.latitude !== null && h.latitude !== undefined ? [h.longitude, h.latitude] : null;
+    var cityBase = REGION_COORDS[h.mapDisplayName] || REGION_COORDS[h.city] || REGION_COORDS[h.province] || businessCoord;
     if (cityBase && !cityMap[h.cityKey]) {
       cityMap[h.cityKey] = {
         key: h.cityKey,
@@ -991,9 +1077,9 @@ export function getMapRegionPoints() {
       };
     }
     if (cityMap[h.cityKey]) cityMap[h.cityKey].count += 1;
-    var districtBase = REGION_COORDS[h.district] || cityBase;
+    var districtBase = businessCoord || REGION_COORDS[h.mapDisplayName] || REGION_COORDS[h.district] || cityBase;
     if (districtBase && !districtMap[h.districtKey]) {
-      var offset = REGION_COORDS[h.district] ? [0, 0] : this.getStableMapOffset(h.districtKey);
+      var offset = businessCoord || REGION_COORDS[h.mapDisplayName] || REGION_COORDS[h.district] ? [0, 0] : this.getStableMapOffset(h.districtKey);
       districtMap[h.districtKey] = {
         key: h.districtKey,
         provinceKey: h.provinceKey,
@@ -1159,7 +1245,7 @@ export function formatShortDate(value) {
   return date.getFullYear() + '-' + (month < 10 ? '0' + month : month) + '-' + (day < 10 ? '0' + day : day);
 }
 export function getSearchText(row) {
-  var fields = [FIELDS.unit.code, FIELDS.unit.name, FIELDS.unit.shortName, FIELDS.unit.type, FIELDS.unit.system, FIELDS.unit.region, FIELDS.unit.level, FIELDS.unit.address, FIELDS.unit.business, FIELDS.unit.remark];
+  var fields = [FIELDS.unit.code, FIELDS.unit.name, FIELDS.unit.shortName, FIELDS.unit.type, FIELDS.unit.system, FIELDS.unit.region, FIELDS.unit.businessRegion, FIELDS.unit.level, FIELDS.unit.address, FIELDS.unit.business, FIELDS.unit.remark];
   var self = this;
   var text = fields.map(fieldId => {
     return self.getValue(row, fieldId);

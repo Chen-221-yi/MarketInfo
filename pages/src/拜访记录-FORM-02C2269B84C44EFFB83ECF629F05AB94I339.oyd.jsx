@@ -11,7 +11,10 @@ var FIELDS = {
     contact: 'associationFormField_kyv33bc8s',
     unit: 'associationFormField_2yle119gl',
     project: 'associationFormField_kyv35uxhy',
+    lead: 'associationFormField_o2e81pniy',
     people: 'employeeField_kyv36zyqq',
+    watchers: 'employeeField_o2e82mhmy',
+    handlers: 'employeeField_o2e83lzlv',
     method: 'selectField_kyv378rc2',
     time: 'dateField_kyv38g8dw',
     place: 'textField_kyv390cmy',
@@ -238,7 +241,7 @@ export function getSummary(row) {
   return '暂无内容摘要';
 }
 export function getSearchText(row) {
-  var fields = [FIELDS.visit.title, FIELDS.visit.contact, FIELDS.visit.unit, FIELDS.visit.project, FIELDS.visit.people, FIELDS.visit.method, FIELDS.visit.place, FIELDS.visit.content, FIELDS.visit.nextAction, FIELDS.visit.recorder];
+  var fields = [FIELDS.visit.title, FIELDS.visit.contact, FIELDS.visit.unit, FIELDS.visit.project, FIELDS.visit.lead, FIELDS.visit.people, FIELDS.visit.watchers, FIELDS.visit.handlers, FIELDS.visit.method, FIELDS.visit.place, FIELDS.visit.content, FIELDS.visit.nextAction, FIELDS.visit.recorder];
   var self = this;
   var text = fields.map(fieldId => {
     return self.getValue(row, fieldId);
@@ -246,6 +249,7 @@ export function getSearchText(row) {
   text += ' ' + this.getAssociationText(row, FIELDS.visit.contact);
   text += ' ' + this.getAssociationText(row, FIELDS.visit.unit);
   text += ' ' + this.getAssociationText(row, FIELDS.visit.project);
+  text += ' ' + this.getAssociationText(row, FIELDS.visit.lead);
   return text.toLowerCase();
 }
 export function getFilteredVisits() {
@@ -556,9 +560,12 @@ export function renderVisitCard(row, isMobile) {
   var self = this;
   var method = this.getValue(row, FIELDS.visit.method);
   var project = this.getAssociationText(row, FIELDS.visit.project);
+  var lead = this.getAssociationText(row, FIELDS.visit.lead);
   var unit = this.getAssociationText(row, FIELDS.visit.unit);
   var contact = this.getAssociationText(row, FIELDS.visit.contact);
   var people = this.getValue(row, FIELDS.visit.people);
+  var watchers = this.getValue(row, FIELDS.visit.watchers);
+  var handlers = this.getValue(row, FIELDS.visit.handlers);
   var recorder = this.getValue(row, FIELDS.visit.recorder);
   var place = this.getValue(row, FIELDS.visit.place);
   var nextAction = this.getValue(row, FIELDS.visit.nextAction);
@@ -572,6 +579,7 @@ export function renderVisitCard(row, isMobile) {
           <div style={styles.titleLine}>
             {this.renderBadge(method, this.methodTone(method))}
             <span style={styles.cardTitle}>{this.getVisitTitle(row)}</span>
+            {lead !== '-' && this.renderBadge('已关联线索', 'success')}
             {project !== '-' && this.renderBadge(project, 'purple')}
             {unit !== '-' && this.renderBadge(unit, 'default')}
           </div>
@@ -586,6 +594,10 @@ export function renderVisitCard(row, isMobile) {
         </div>
       </div>
       <div style={styles.summaryText}>{this.getSummary(row)}</div>
+      {(lead !== '-' || watchers !== '-' || handlers !== '-') && <div style={styles.actionLine}>
+        <span style={styles.actionIcon}>●</span>
+        <span style={styles.actionText}>线索：{lead !== '-' ? lead : '未关联'}{handlers !== '-' ? ' · 经办人：' + handlers : ''}{watchers !== '-' ? ' · 必看人：' + watchers : ''}</span>
+      </div>}
       <div style={styles.actionLine}>
         <span style={styles.actionIcon}>○</span>
         <span style={styles.actionText}>后续：{nextAction !== '-' ? nextAction : '暂无后续动作'}</span>

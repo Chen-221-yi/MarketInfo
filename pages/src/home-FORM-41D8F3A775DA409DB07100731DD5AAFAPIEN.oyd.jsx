@@ -1,4 +1,4 @@
-// 客户关系管理系统-新版 首页总览
+// 市场信息管理系统 首页工作台
 
 var APP_TYPE = 'APP_LC7BU43GCVLSI0TH8POE';
 var BASE_URL = 'https://aplttv.aliwork.com';
@@ -7,6 +7,8 @@ var FORMS = {
   contactDetail: 'FORM-89CA116EA0134CACB77EAA0F87AA7AB8MD1C',
   visitManage: 'FORM-02C2269B84C44EFFB83ECF629F05AB94I339',
   visitDetail: 'FORM-6CC5A6BBE39F439CA213B8CC3BD7E429GQW1',
+  leadManage: 'FORM-4E927F6C9D1E43EC8226DDB561F31FAC4OF7',
+  leadDetail: 'FORM-48EA952D879B4D1D94580C2EA14B7AE43HM9',
   projectManage: 'FORM-CAC6AFFA0A3341B598561F68EE7B4B8BTZGB',
   projectDetail: 'FORM-3367C1CD6BDB4FE995BCA69ECFF03419Q0A4',
   unitManage: 'FORM-CA9908793C7C4EA3997B43B5BF5FAA34KEAC',
@@ -125,17 +127,23 @@ var FIELDS = {
     risk: 'textareaField_jpjnf46ew',
     block: 'textareaField_jpjngp2l6',
     nextAction: 'textareaField_jpjnh16i8',
+    nextOwner: 'employeeField_jpjniimk7',
     nextDate: 'dateField_jpjnjcxmp',
     recent: 'textareaField_jpjnk9q1c',
     recentDate: 'dateField_jpjnl71j3',
-    status: 'selectField_jpjnm9c66'
+    status: 'selectField_jpjnm9c66',
+    sourceLead: 'associationFormField_o8c51p6t3'
   },
   visit: {
+    serial: 'serialNumberField_kyv216g78',
     title: 'textField_kyv32ess0',
     contact: 'associationFormField_kyv33bc8s',
     unit: 'associationFormField_2yle119gl',
     project: 'associationFormField_kyv35uxhy',
+    lead: 'associationFormField_o2e81pniy',
     people: 'employeeField_kyv36zyqq',
+    watchers: 'employeeField_o2e82mhmy',
+    handlers: 'employeeField_o2e83lzlv',
     method: 'selectField_kyv378rc2',
     time: 'dateField_kyv38g8dw',
     place: 'textField_kyv390cmy',
@@ -158,11 +166,15 @@ var FIELDS = {
     status: 'selectField_n31wb0qv0'
   },
   intel: {
+    serial: 'serialNumberField_o5hf11mwc',
     contact: 'associationFormField_o5hf21sgj',
     project: 'associationFormField_o5hf3lnak',
+    unit: 'associationFormField_nnet1kq13',
+    sourceVisit: 'associationFormField_5szc127yh',
     category: 'selectField_o5hf4u689',
     title: 'textField_o5hf51ir9',
     content: 'textareaField_o5hf6dkbq',
+    importance: 'selectField_mq4vrff2',
     date: 'dateField_o5hfgz10c',
     sourceType: 'selectField_o5hf88jri',
     status: 'selectField_o5hfbq4tf',
@@ -170,6 +182,11 @@ var FIELDS = {
     validUntil: 'dateField_5szd5xzdb',
     remindDate: 'dateField_5szd6vvxq',
     owner: 'employeeField_5szd78u2t',
+    handlers: 'employeeField_nnet2xu74',
+    watchers: 'employeeField_nnet3hm2v',
+    recorder: 'employeeField_o5hff9siq',
+    recordTime: 'dateField_o5hfgz10c',
+    maturity: 'selectField_nneu896bu',
     nextAction: 'textareaField_5szd8976q'
   },
   career: {
@@ -197,10 +214,54 @@ var FIELDS = {
     changeType: 'selectField_3iq35yi6g'
   }
 };
+var WORK_TABS = [{
+  key: 'follow',
+  label: '待我跟进'
+}, {
+  key: 'attention',
+  label: '我需关注'
+}, {
+  key: 'owned',
+  label: '我负责的线索'
+}, {
+  key: 'due',
+  label: '即将到期'
+}, {
+  key: 'latest',
+  label: '最新动态'
+}];
+var WORK_INFO = {
+  scope: {
+    title: '与我相关数据口径',
+    lines: ['本区域只展示与当前登录用户有关的数据。', '主要匹配跟进经办人、关注人/必看人、负责人、记录人、参与人等人员字段。', '不同 Tab 只是筛选视角不同，不代表新增任务流或审批流。']
+  },
+  follow: {
+    title: '待我跟进',
+    lines: ['数据来源：市场线索、拜访记录。', '筛选规则：当前登录人在“跟进经办人”中，且事项未关闭、未归档。', '用途说明：用于查看需要我继续推进或反馈的线索和拜访事项。']
+  },
+  attention: {
+    title: '我需关注',
+    lines: ['数据来源：市场线索、拜访记录。', '筛选规则：当前登录人在“关注人 / 必看人”中。', '用途说明：用于查看别人指定我需要了解或持续关注的事项，不等同于正式待办。']
+  },
+  owned: {
+    title: '我负责的线索',
+    lines: ['数据来源：市场线索。', '筛选规则：当前登录人为线索负责人、跟进经办人，或按当前系统已有逻辑判定为我负责的线索。', '用途说明：用于查看由我主导推进的市场线索。']
+  },
+  due: {
+    title: '即将到期',
+    lines: ['数据来源：市场线索、拜访记录、项目档案。', '筛选规则：与当前登录人相关，且提醒日期、有效截止日期或下一步计划日期临近。', '用途说明：用于提醒即将超期或需要尽快处理的事项。']
+  },
+  latest: {
+    title: '最新动态',
+    lines: ['数据来源：市场线索、拜访记录、项目档案。', '筛选规则：与当前登录人相关，并按最近创建时间、更新时间、拜访时间或项目更新时间倒序展示。', '用途说明：用于查看最近发生的线索推进、拜访记录和项目变化。']
+  }
+};
 var _customState = {
   loading: true,
   error: '',
   searchKeyword: '',
+  activeWorkTab: 'follow',
+  activeWorkInfoKey: '',
   contacts: [],
   projects: [],
   visits: [],
@@ -695,6 +756,40 @@ export function getProjectNameFromAssociation(value) {
   var project = this.findById(_customState.projects, id);
   return project ? this.getValue(project, FIELDS.project.name) : this.formatValue(value);
 }
+export function getAssociationText(row, fieldId) {
+  return this.formatValue(this.rawValue(row, fieldId));
+}
+export function getAssociationItems(value) {
+  var parsed = this.parseAssociationValue(value);
+  if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed;
+  return [parsed];
+}
+export function employeeContainsCurrentUser(row, fieldId) {
+  if (!fieldId) return false;
+  var userId = this.getLoginUserId();
+  var userName = this.getLoginUserName();
+  if (userId === 'default') userId = '';
+  if (userName === '当前用户') userName = '';
+  var raw = this.rawValue(row, fieldId);
+  var text = this.formatValue(raw);
+  if (userName && text !== '-' && text.indexOf(userName) >= 0) return true;
+  var items = this.getAssociationItems(raw);
+  for (var i = 0; i < items.length; i += 1) {
+    var item = items[i];
+    if (typeof item === 'string') {
+      if (userId && item === userId) return true;
+      if (userName && item.indexOf(userName) >= 0) return true;
+    }
+    if (item && typeof item === 'object') {
+      var id = item.userId || item.userid || item.employeeId || item.emplId || item.value || item.id || '';
+      var name = item.name || item.userName || item.nickName || item.label || item.displayName || item.employeeName || '';
+      if (userId && String(id) === String(userId)) return true;
+      if (userName && this.formatValue(name).indexOf(userName) >= 0) return true;
+    }
+  }
+  return false;
+}
 export function findById(list, id) {
   if (!id) return null;
   var matched = list.filter(item => {
@@ -897,6 +992,266 @@ export function getPendingIntel() {
     return ad - bd;
   });
   return list.slice(0, 3);
+}
+export function isLeadClosed(row) {
+  return this.getValue(row, FIELDS.intel.status) === '已关闭';
+}
+export function isLeadTransferred(row) {
+  return this.getValue(row, FIELDS.intel.status) === '已转项目';
+}
+export function isLeadInProgress(row) {
+  var status = this.getValue(row, FIELDS.intel.status);
+  return status === '待跟进' || status === '跟进中';
+}
+export function getLeadTitle(row) {
+  var title = this.getFieldText(row, FIELDS.intel.title);
+  if (title) return title;
+  var unit = this.getAssociationText(row, FIELDS.intel.unit);
+  var type = this.getValue(row, FIELDS.intel.category);
+  if (unit !== '-' && type !== '-') return unit + ' · ' + type;
+  if (unit !== '-') return unit;
+  return this.getValue(row, FIELDS.intel.serial);
+}
+export function getProjectTitle(row) {
+  var title = this.getFieldText(row, FIELDS.project.name);
+  if (title) return title;
+  return this.getFieldText(row, FIELDS.project.shortName) || '未命名项目';
+}
+export function getUnitNameFromLead(row) {
+  var id = this.getAssociationId(this.rawValue(row, FIELDS.intel.unit));
+  var unit = this.findById(_customState.units, id);
+  if (unit) return this.getValue(unit, FIELDS.unit.name);
+  return this.getAssociationText(row, FIELDS.intel.unit);
+}
+export function getLinkedLeadFromVisit(row) {
+  var ids = this.getAssociationIds(this.rawValue(row, FIELDS.visit.lead));
+  for (var i = 0; i < ids.length; i += 1) {
+    var lead = this.findById(_customState.intel, ids[i]);
+    if (lead) return lead;
+  }
+  return null;
+}
+export function getSourceLeadFromProject(row) {
+  var ids = this.getAssociationIds(this.rawValue(row, FIELDS.project.sourceLead));
+  for (var i = 0; i < ids.length; i += 1) {
+    var lead = this.findById(_customState.intel, ids[i]);
+    if (lead) return lead;
+  }
+  return null;
+}
+export function getLeadRelationText(row) {
+  var parts = [];
+  if (this.employeeContainsCurrentUser(row, FIELDS.intel.owner)) parts.push('线索负责人');
+  if (this.employeeContainsCurrentUser(row, FIELDS.intel.handlers)) parts.push('跟进经办人');
+  if (this.employeeContainsCurrentUser(row, FIELDS.intel.watchers)) parts.push('关注/必看');
+  if (this.employeeContainsCurrentUser(row, FIELDS.intel.recorder)) parts.push('我创建的');
+  return parts.join('、');
+}
+export function getVisitRelationText(row) {
+  var parts = [];
+  if (this.employeeContainsCurrentUser(row, FIELDS.visit.watchers)) parts.push('关注/必看');
+  if (this.employeeContainsCurrentUser(row, FIELDS.visit.handlers)) parts.push('跟进经办人');
+  if (this.employeeContainsCurrentUser(row, FIELDS.visit.people)) parts.push('我方参与');
+  if (this.employeeContainsCurrentUser(row, FIELDS.visit.recorder)) parts.push('记录人');
+  return parts.join('、');
+}
+export function getProjectRelationText(row) {
+  var parts = [];
+  if (this.employeeContainsCurrentUser(row, FIELDS.project.owner)) parts.push('项目负责人');
+  if (this.employeeContainsCurrentUser(row, FIELDS.project.nextOwner)) parts.push('下一步负责人');
+  var lead = this.getSourceLeadFromProject(row);
+  if (lead && this.getLeadRelationText(lead)) parts.push('来源线索相关');
+  return parts.join('、');
+}
+export function isLeadRelatedToMe(row) {
+  return !!this.getLeadRelationText(row);
+}
+export function isVisitRelatedToMe(row) {
+  return !!this.getVisitRelationText(row);
+}
+export function isProjectRelatedToMe(row) {
+  return !!this.getProjectRelationText(row);
+}
+export function getNearestUpcomingTime(values) {
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  var end = today + 7 * 86400000;
+  var best = 0;
+  (values || []).forEach(item => {
+    var time = this.normalizeTime(item);
+    if (time >= today && time <= end && (!best || time < best)) best = time;
+  });
+  return best;
+}
+export function getDueRisk(time) {
+  var days = this.daysUntil(time);
+  if (days === null) return '';
+  if (days <= 0) return '今日到期';
+  if (days <= 3) return '高风险';
+  return '即将到期';
+}
+export function getLeadUpdateTime(row) {
+  return this.getLatestTime([row && row.gmtModified, row && row.gmtCreate, this.rawValue(row, FIELDS.intel.recordTime), this.rawValue(row, FIELDS.intel.remindDate)]);
+}
+export function getVisitUpdateTime(row) {
+  return this.getLatestTime([row && row.gmtModified, row && row.gmtCreate, this.rawValue(row, FIELDS.visit.time), this.rawValue(row, FIELDS.visit.recordTime)]);
+}
+export function getProjectUpdateTime(row) {
+  return this.getLatestTime([this.rawValue(row, FIELDS.project.recentDate), row && row.gmtModified, row && row.gmtCreate]);
+}
+export function makeLeadWorkItem(row, relationText) {
+  var remindDate = this.rawValue(row, FIELDS.intel.remindDate);
+  var validUntil = this.rawValue(row, FIELDS.intel.validUntil);
+  var dueTime = this.getNearestUpcomingTime([remindDate, validUntil]);
+  return {
+    id: 'lead-' + this.getRowId(row),
+    type: 'lead',
+    typeText: '线索',
+    row: row,
+    formUuid: FORMS.intel,
+    title: this.getLeadTitle(row),
+    status: this.getValue(row, FIELDS.intel.status),
+    importance: this.getValue(row, FIELDS.intel.importance),
+    maturity: this.getValue(row, FIELDS.intel.maturity),
+    unit: this.getUnitNameFromLead(row),
+    contact: this.getContactNameFromAssociation(this.rawValue(row, FIELDS.intel.contact)),
+    handlers: this.getValue(row, FIELDS.intel.handlers),
+    watchers: this.getValue(row, FIELDS.intel.watchers),
+    remindDate: remindDate,
+    validUntil: validUntil,
+    nextAction: this.getValue(row, FIELDS.intel.nextAction),
+    updatedTime: this.getLeadUpdateTime(row),
+    dueTime: dueTime,
+    risk: dueTime ? this.getDueRisk(dueTime) : '',
+    relationText: relationText || this.getLeadRelationText(row),
+    muted: this.isLeadClosed(row) || this.isLeadTransferred(row)
+  };
+}
+export function makeVisitWorkItem(row, relationText) {
+  var lead = this.getLinkedLeadFromVisit(row);
+  var nextDate = this.rawValue(row, FIELDS.visit.nextDate);
+  var dueTime = this.getNearestUpcomingTime([nextDate]);
+  var contact = this.getContactNameFromAssociation(this.rawValue(row, FIELDS.visit.contact));
+  return {
+    id: 'visit-' + this.getRowId(row),
+    type: 'visit',
+    typeText: '拜访',
+    row: row,
+    leadRow: lead,
+    formUuid: FORMS.visit,
+    title: this.getFieldText(row, FIELDS.visit.title) || '未命名拜访',
+    status: this.getValue(row, FIELDS.visit.method),
+    importance: '-',
+    maturity: '-',
+    unit: this.getAssociationText(row, FIELDS.visit.unit),
+    contact: contact,
+    handlers: this.getValue(row, FIELDS.visit.handlers),
+    watchers: this.getValue(row, FIELDS.visit.watchers),
+    remindDate: nextDate,
+    validUntil: '-',
+    nextAction: this.getValue(row, FIELDS.visit.nextAction),
+    updatedTime: this.getVisitUpdateTime(row),
+    dueTime: dueTime,
+    risk: dueTime ? this.getDueRisk(dueTime) : '',
+    relationText: relationText || this.getVisitRelationText(row),
+    muted: false
+  };
+}
+export function makeProjectWorkItem(row, relationText) {
+  var sourceLead = this.getSourceLeadFromProject(row);
+  var nextDate = this.rawValue(row, FIELDS.project.nextDate);
+  var dueTime = this.getNearestUpcomingTime([nextDate]);
+  return {
+    id: 'project-' + this.getRowId(row),
+    type: 'project',
+    typeText: '项目',
+    row: row,
+    leadRow: sourceLead,
+    formUuid: FORMS.project,
+    title: this.getProjectTitle(row),
+    status: this.getValue(row, FIELDS.project.status),
+    importance: this.getValue(row, FIELDS.project.star),
+    maturity: this.getValue(row, FIELDS.project.phase),
+    unit: this.getUnitNameFromProject(row),
+    contact: '-',
+    handlers: this.getValue(row, FIELDS.project.nextOwner),
+    watchers: '-',
+    remindDate: nextDate,
+    validUntil: '-',
+    nextAction: this.getValue(row, FIELDS.project.nextAction),
+    updatedTime: this.getProjectUpdateTime(row),
+    dueTime: dueTime,
+    risk: dueTime ? this.getDueRisk(dueTime) : '',
+    relationText: relationText || this.getProjectRelationText(row),
+    muted: false
+  };
+}
+export function getLeadStatusRank(status) {
+  if (status === '待跟进') return 0;
+  if (status === '跟进中') return 1;
+  if (status === '已转项目') return 3;
+  if (status === '已关闭') return 4;
+  return 2;
+}
+export function sortWorkItems(list, mode) {
+  var items = (list || []).slice(0);
+  items.sort((a, b) => {
+    if (mode === 'due') return (a.dueTime || 0) - (b.dueTime || 0) || (b.updatedTime || 0) - (a.updatedTime || 0);
+    if (mode === 'latest') return (b.updatedTime || 0) - (a.updatedTime || 0);
+    var rank = this.getLeadStatusRank(a.status) - this.getLeadStatusRank(b.status);
+    if (rank) return rank;
+    return (a.dueTime || 9999999999999) - (b.dueTime || 9999999999999) || (b.updatedTime || 0) - (a.updatedTime || 0);
+  });
+  return items.slice(0, 8);
+}
+export function getMyWorkItems(tabKey) {
+  var list = [];
+  var leads = _customState.intel || [];
+  var visits = _customState.visits || [];
+  var projects = _customState.projects || [];
+  var key = tabKey || _customState.activeWorkTab || 'follow';
+  leads.forEach(row => {
+    if (key === 'follow' && !this.isLeadClosed(row) && this.employeeContainsCurrentUser(row, FIELDS.intel.handlers)) list.push(this.makeLeadWorkItem(row, '跟进经办人'));
+    if (key === 'attention' && !this.isLeadClosed(row) && this.employeeContainsCurrentUser(row, FIELDS.intel.watchers)) list.push(this.makeLeadWorkItem(row, '关注/必看'));
+    if (key === 'owned' && this.employeeContainsCurrentUser(row, FIELDS.intel.owner)) list.push(this.makeLeadWorkItem(row, '线索负责人'));
+    if (key === 'due' && !this.isLeadClosed(row) && this.isLeadRelatedToMe(row)) {
+      var leadItem = this.makeLeadWorkItem(row);
+      if (leadItem.dueTime) list.push(leadItem);
+    }
+    if (key === 'latest' && this.isLeadRelatedToMe(row)) list.push(this.makeLeadWorkItem(row));
+  });
+  visits.forEach(row => {
+    if (key === 'follow' && this.employeeContainsCurrentUser(row, FIELDS.visit.handlers)) list.push(this.makeVisitWorkItem(row, '跟进经办人'));
+    if (key === 'attention' && this.employeeContainsCurrentUser(row, FIELDS.visit.watchers)) list.push(this.makeVisitWorkItem(row, '关注/必看'));
+    if (key === 'due' && this.isVisitRelatedToMe(row)) {
+      var visitItem = this.makeVisitWorkItem(row);
+      if (visitItem.dueTime) list.push(visitItem);
+    }
+    if (key === 'latest' && this.isVisitRelatedToMe(row)) list.push(this.makeVisitWorkItem(row));
+  });
+  projects.forEach(row => {
+    if (key === 'follow' && this.employeeContainsCurrentUser(row, FIELDS.project.nextOwner)) list.push(this.makeProjectWorkItem(row, '下一步负责人'));
+    if (key === 'due' && this.isProjectRelatedToMe(row)) {
+      var projectItem = this.makeProjectWorkItem(row);
+      if (projectItem.dueTime) list.push(projectItem);
+    }
+    if (key === 'latest' && this.isProjectRelatedToMe(row)) list.push(this.makeProjectWorkItem(row));
+  });
+  return this.sortWorkItems(list, key);
+}
+export function getWorkTabCount(tabKey) {
+  return this.getMyWorkItems(tabKey).length;
+}
+export function getThisMonthVisits() {
+  var now = new Date();
+  var year = now.getFullYear();
+  var month = now.getMonth();
+  return (_customState.visits || []).filter(row => {
+    var time = this.normalizeTime(this.rawValue(row, FIELDS.visit.time));
+    if (!time) return false;
+    var date = new Date(time);
+    return date.getFullYear() === year && date.getMonth() === month;
+  });
 }
 export function normalizeTime(value) {
   if (!value || value === '-') return 0;
@@ -1150,7 +1505,7 @@ export function getInProgressProjects() {
   return _customState.projects.filter(item => {
     var status = this.getValue(item, FIELDS.project.status);
     var phase = this.getValue(item, FIELDS.project.phase);
-    return status !== '归档' && phase !== '归档' && phase !== '失败';
+    return status !== '归档' && status !== '暂停' && phase !== '成功' && phase !== '失败' && phase !== '归档';
   });
 }
 export function getMetricData() {
@@ -1166,18 +1521,35 @@ export function getMetricData() {
   var incomplete = _customState.contacts.filter(item => {
     return this.getCompletion(item) < 80;
   }).length;
-  var projects = this.getInProgressProjects().length;
+  var inProgressProjects = this.getInProgressProjects();
+  var projects = inProgressProjects.length;
+  var focusProjects = inProgressProjects.filter(item => {
+    return this.getValue(item, FIELDS.project.status) === '重点推进' || this.getValue(item, FIELDS.project.phase) === '重点推进';
+  }).length;
   var keyRelations = _customState.relations.filter(item => {
     var role = this.getValue(item, FIELDS.relation.role);
     return role === '决策' || role === '牵头' || role === '影响';
   }).length;
+  var leads = _customState.intel || [];
+  var activeLeads = leads.filter(item => this.isLeadInProgress(item)).length;
+  var myFollowLeads = leads.filter(item => {
+    return !this.isLeadClosed(item) && this.employeeContainsCurrentUser(item, FIELDS.intel.handlers);
+  }).length;
+  var monthVisits = this.getThisMonthVisits();
+  var doorVisits = monthVisits.filter(item => this.getValue(item, FIELDS.visit.method) === '上门').length;
   return {
     activeContacts: activeContacts,
     overdue: overdue,
     soon: soon,
     incomplete: incomplete,
     projects: projects,
-    keyRelations: keyRelations
+    keyRelations: keyRelations,
+    activeLeads: activeLeads,
+    myFollowLeads: myFollowLeads,
+    dueItems: this.getWorkTabCount('due'),
+    monthVisits: monthVisits.length,
+    doorVisits: doorVisits,
+    focusProjects: focusProjects
   };
 }
 export function handleSearchChange(e) {
@@ -1230,6 +1602,16 @@ export function openContactDetail(contact) {
     contactId: id
   }, false);
 }
+export function openMarketLeadList() {
+  this.openFormWithParams(FORMS.leadManage, {}, false);
+}
+export function openLeadDetail(row) {
+  var id = this.getRowId(row);
+  if (!id) return;
+  this.openFormWithParams(FORMS.leadDetail, {
+    leadId: id
+  }, false);
+}
 export function openVisitDetail(row) {
   var id = this.getRowId(row);
   if (!id) return;
@@ -1263,6 +1645,40 @@ export function openIntelDetail(row) {
   var id = this.getRowId(row);
   if (!id) return;
   this.openNativeDetailForm(FORMS.intel, id);
+}
+export function setWorkTab(key) {
+  _customState.activeWorkTab = key || 'follow';
+  _customState.activeWorkInfoKey = '';
+  this.forceUpdate();
+}
+export function getWorkInfo(key) {
+  return WORK_INFO[key] || null;
+}
+export function toggleWorkInfo(key) {
+  _customState.activeWorkInfoKey = _customState.activeWorkInfoKey === key ? '' : key;
+  this.forceUpdate();
+}
+export function openWorkItem(item) {
+  if (!item) return;
+  if (item.type === 'lead') {
+    this.openLeadDetail(item.row);
+    return;
+  }
+  if (item.type === 'visit') {
+    if (item.leadRow) {
+      this.openLeadDetail(item.leadRow);
+      return;
+    }
+    this.openVisitDetail(item.row);
+    return;
+  }
+  if (item.type === 'project') {
+    this.openProjectDetail(item.row);
+  }
+}
+export function openWorkNative(item) {
+  if (!item) return;
+  this.openNativeDetailForm(item.formUuid, this.getRowId(item.row));
 }
 export function openUrl(url) {
   if (this.utils.openPage) {
@@ -1406,10 +1822,23 @@ export function renderButton(label, type, onClick) {
       {label}
     </button>;
 }
+export function renderIconButton(label, type, iconName, onClick) {
+  var primary = type === 'primary';
+  return <button onClick={e => {
+    if (onClick) onClick(e);
+  }} style={Object.assign({}, styles.button, styles.iconButton, primary ? styles.buttonPrimary : styles.buttonDefault)}>
+      {this.renderButtonIcon(iconName, primary ? '#FFFFFF' : '#155EEF')}
+      <span>{label}</span>
+    </button>;
+}
+export function renderButtonIcon(name, color) {
+  var path = <g><circle cx="9" cy="8" r="4"></circle><path d="M3 21v-1a6 6 0 0 1 12 0v1"></path><path d="M18 8v6"></path><path d="M15 11h6"></path></g>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color || '#155EEF'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={styles.buttonIcon}>{path}</svg>;
+}
 export function renderNav(isMobile) {
   var self = this;
   var items = [{
-    label: '首页总览',
+    label: '首页工作台',
     action: 'home'
   }, {
     label: '联系人管理',
@@ -1432,10 +1861,10 @@ export function renderNav(isMobile) {
   }];
   return <div style={isMobile ? styles.mobileNav : styles.sidebar}>
       {!isMobile && <div style={styles.brand}>
-          <div style={styles.brandMark}>CRM</div>
+          <div style={styles.brandMark}>MI</div>
           <div>
-            <div style={styles.brandTitle}>关系管理系统</div>
-            <div style={styles.brandSub}>RMS v1.0</div>
+            <div style={styles.brandTitle}>市场信息管理系统</div>
+            <div style={styles.brandSub}>V1.4 工作台</div>
           </div>
         </div>}
       <div style={isMobile ? styles.mobileNavScroll : styles.navList}>
@@ -1465,7 +1894,7 @@ export function handleNav(action) {
 }
 export function renderTopbar(isMobile) {
   return <div style={isMobile ? styles.topbarMobile : styles.topbar}>
-      <div style={styles.topTitle}>首页总览</div>
+      <div style={styles.topTitle}>个人工作台</div>
       <div style={styles.topRight}>
         <div style={styles.searchBox}>
           <span style={styles.searchMark}>⌕</span>
@@ -1488,17 +1917,20 @@ export function renderHero(isMobile) {
   return <div style={isMobile ? styles.heroMobile : styles.hero}>
       <div>
         <div style={styles.heroTitle}>欢迎回来，{userName}</div>
-        <div style={styles.heroSub}>今天是 {this.formatTodayCn()}，有 {metric.overdue} 位联系人拜访已超期</div>
+        <div style={styles.heroSub}>今天是 {this.formatTodayCn()}，重点查看与你相关的线索、拜访和项目推进</div>
       </div>
       <div style={styles.heroActions}>
-        {this.renderButton('新增联系人', 'primary', e => {
+        {this.renderIconButton('新增联系人', 'primary', 'userPlus', e => {
         this.openSubmissionForm(FORMS.contact);
+      })}
+        {this.renderButton('新增线索', 'primary', e => {
+        this.openSubmissionForm(FORMS.intel);
       })}
         {this.renderButton('记录拜访', 'default', e => {
         this.openSubmissionForm(FORMS.visit);
       })}
-        {this.renderButton('数据维护', 'default', e => {
-        this.openMaintenancePanel();
+        {this.renderButton('刷新数据', 'default', e => {
+        this.refreshData();
       })}
       </div>
     </div>;
@@ -1513,33 +1945,49 @@ export function renderMetrics(gridStyle) {
     icon: 'users',
     action: 'contacts'
   }, {
-    title: '拜访超期',
-    value: metric.overdue,
-    sub: '即将超期 ' + metric.soon + ' 人',
-    color: '#FF3045',
-    icon: 'alert',
-    action: 'overdue'
+    title: '在推线索',
+    value: metric.activeLeads,
+    sub: '待跟进 / 跟进中',
+    color: '#2563FF',
+    icon: 'bar',
+    action: 'leads'
   }, {
     title: '在推项目',
     value: metric.projects,
-    sub: '关键关系 ' + metric.keyRelations + ' 条',
-    color: '#B847F2',
+    sub: '重点推进 ' + metric.focusProjects + ' 个',
+    color: '#6941C6',
     icon: 'folder',
     action: 'projects'
   }, {
-    title: '资料不足',
-    value: metric.incomplete,
-    sub: '完整度低于80%',
+    title: '待我跟进',
+    value: metric.myFollowLeads,
+    sub: '我是跟进经办人',
+    color: '#FF3045',
+    icon: 'alert',
+    action: 'follow'
+  }, {
+    title: '即将到期',
+    value: metric.dueItems,
+    sub: '提醒 / 截止临近',
+    color: '#B847F2',
+    icon: 'folder',
+    action: 'due'
+  }, {
+    title: '本月拜访',
+    value: metric.monthVisits,
+    sub: '上门拜访 ' + metric.doorVisits + ' 次',
     color: '#F59E0B',
-    icon: 'bar',
-    action: 'incomplete'
+    icon: 'users',
+    action: 'visits'
   }];
   return <div style={gridStyle || styles.metricGrid}>
       {cards.map(card => <div key={card.title} onClick={e => {
       if (card.action === 'contacts') this.openContactList();
-      if (card.action === 'overdue') this.openContactList('overdue');
+      if (card.action === 'leads') this.openMarketLeadList();
       if (card.action === 'projects') this.openNativeForm(FORMS.projectManage);
-      if (card.action === 'incomplete') this.openContactList('incomplete');
+      if (card.action === 'follow') this.setWorkTab('follow');
+      if (card.action === 'due') this.setWorkTab('due');
+      if (card.action === 'visits') this.openNativeForm(FORMS.visitManage);
     }} style={styles.metricCard}>
           {this.renderIcon(card.icon, card.color)}
           <div style={styles.metricText}>
@@ -1549,6 +1997,152 @@ export function renderMetrics(gridStyle) {
           </div>
           <div style={styles.cardArrow}>›</div>
         </div>)}
+    </div>;
+}
+export function getTypeTone(type) {
+  if (type === 'lead') return 'primary';
+  if (type === 'visit') return 'success';
+  if (type === 'project') return 'warning';
+  return 'default';
+}
+export function getImportanceTone(value) {
+  if (value === '高' || value === '五星') return 'danger';
+  if (value === '中' || value === '四星') return 'warning';
+  if (value === '低') return 'default';
+  return 'primary';
+}
+export function getMaturityTone(value) {
+  if (value === '重点推进' || value === '可转项目') return 'primary';
+  if (value === '持续推进') return 'warning';
+  return 'default';
+}
+export function getRiskTone(value) {
+  if (value === '今日到期' || value === '高风险') return 'danger';
+  if (value === '即将到期') return 'warning';
+  return 'default';
+}
+export function renderWorkInfoIcon(key) {
+  var info = this.getWorkInfo(key);
+  if (!info) return null;
+  var active = _customState.activeWorkInfoKey === key;
+  var titleText = info.title + '\n' + (info.lines || []).join('\n');
+  return <span title={titleText} onClick={e => {
+    e.stopPropagation();
+    this.toggleWorkInfo(key);
+  }} style={Object.assign({}, styles.workInfoIcon, active ? styles.workInfoIconActive : {})}>i</span>;
+}
+export function renderWorkInfoPanel(info) {
+  if (!info) return null;
+  return <div style={styles.workInfoPanel}>
+      <div style={styles.workInfoPanelTitle}>{info.title}</div>
+      {(info.lines || []).map((line, index) => <div key={index} style={styles.workInfoPanelLine}>{line}</div>)}
+    </div>;
+}
+export function renderRelatedWorkbench(isMobile) {
+  var items = this.getMyWorkItems(_customState.activeWorkTab);
+  var activeTab = _customState.activeWorkTab || 'follow';
+  var activeInfo = this.getWorkInfo(_customState.activeWorkInfoKey);
+  var emptyText = activeTab === 'attention' ? '暂无我需关注的事项' : '暂无与你相关的事项';
+  return <div style={styles.workbench}>
+      <div style={isMobile ? styles.workbenchHeadMobile : styles.workbenchHead}>
+        <div>
+          <div style={styles.workbenchTitleRow}>
+            <div style={styles.workbenchTitle}>与我相关</div>
+            {this.renderWorkInfoIcon('scope')}
+          </div>
+          <div style={styles.workbenchSub}>围绕当前登录用户，汇总市场线索、拜访记录和项目推进。</div>
+          {_customState.activeWorkInfoKey === 'scope' ? this.renderWorkInfoPanel(activeInfo) : null}
+        </div>
+        <button onClick={e => {
+        this.refreshData();
+      }} style={styles.workRefreshButton}>刷新数据</button>
+      </div>
+      <div style={styles.workTabs}>
+        {WORK_TABS.map(tab => <button key={tab.key} onClick={e => {
+        this.setWorkTab(tab.key);
+      }} style={Object.assign({}, styles.workTab, activeTab === tab.key ? styles.workTabActive : {})}>
+            <span>{tab.label}</span>
+            {this.renderWorkInfoIcon(tab.key)}
+            <span style={Object.assign({}, styles.workTabCount, activeTab === tab.key ? styles.workTabCountActive : {})}>{this.getWorkTabCount(tab.key)}</span>
+          </button>)}
+      </div>
+      {_customState.activeWorkInfoKey && _customState.activeWorkInfoKey !== 'scope' ? this.renderWorkInfoPanel(activeInfo) : null}
+      <div style={styles.workList}>
+        {items.length ? items.map(item => this.renderWorkItem(item, isMobile)) : this.renderEmpty(emptyText)}
+      </div>
+    </div>;
+}
+export function renderWorkField(label, value) {
+  var text = this.formatValue(value);
+  return <div style={styles.workField}>
+      <span style={styles.workFieldLabel}>{label}</span>
+      <span style={styles.workFieldValue}>{text}</span>
+    </div>;
+}
+export function renderWorkActionButton(label, onClick, primary) {
+  return <button onClick={e => {
+    e.stopPropagation();
+    if (onClick) onClick(e);
+  }} style={Object.assign({}, styles.workActionButton, primary ? styles.workActionPrimary : {})}>{label}</button>;
+}
+export function renderWorkActions(item) {
+  var self = this;
+  var nativeActionLabel = '编辑信息';
+  if (item.type === 'lead') nativeActionLabel = '完善线索';
+  if (item.type === 'visit') nativeActionLabel = '编辑拜访';
+  if (item.type === 'project') nativeActionLabel = '编辑项目';
+  return <div style={styles.workActions}>
+      {item.type === 'lead' && this.renderWorkActionButton('查看线索', e => {
+      self.openLeadDetail(item.row);
+    }, true)}
+      {item.type === 'visit' && item.leadRow && this.renderWorkActionButton('查看线索', e => {
+      self.openLeadDetail(item.leadRow);
+    }, true)}
+      {item.type === 'visit' && this.renderWorkActionButton('查看拜访', e => {
+      self.openVisitDetail(item.row);
+    }, !item.leadRow)}
+      {item.type === 'project' && this.renderWorkActionButton('查看项目', e => {
+      self.openProjectDetail(item.row);
+    }, true)}
+      {item.type === 'project' && item.leadRow && this.renderWorkActionButton('查看线索', e => {
+      self.openLeadDetail(item.leadRow);
+    }, false)}
+      {this.renderWorkActionButton(nativeActionLabel, e => {
+      self.openWorkNative(item);
+    }, false)}
+    </div>;
+}
+export function renderWorkItem(item, isMobile) {
+  var self = this;
+  var cardStyle = Object.assign({}, styles.workItem, item.muted ? styles.workItemMuted : {});
+  var metaStyle = isMobile ? styles.workMetaMobile : styles.workMeta;
+  return <div key={item.id} onClick={e => {
+    self.openWorkItem(item);
+  }} style={cardStyle}>
+      <div style={isMobile ? styles.workItemHeadMobile : styles.workItemHead}>
+        <div style={styles.workTitleBlock}>
+          <div style={styles.workBadges}>
+            {this.renderBadge(item.typeText, this.getTypeTone(item.type))}
+            {this.renderBadge(item.status, this.tone(item.status))}
+            {item.importance !== '-' && this.renderBadge(item.importance, this.getImportanceTone(item.importance))}
+            {item.maturity !== '-' && this.renderBadge(item.maturity, this.getMaturityTone(item.maturity))}
+            {item.risk && this.renderBadge(item.risk, this.getRiskTone(item.risk))}
+          </div>
+          <div style={styles.workTitle}>{item.title}</div>
+          <div style={styles.workRelation}>{item.relationText || '与我相关'}</div>
+        </div>
+        {this.renderWorkActions(item)}
+      </div>
+      <div style={metaStyle}>
+        {this.renderWorkField('来源单位', item.unit)}
+        {this.renderWorkField('关联联系人', item.contact)}
+        {this.renderWorkField('跟进经办人', item.handlers)}
+        {this.renderWorkField('关注人 / 必看人', item.watchers)}
+        {this.renderWorkField('提醒日期', this.formatDate(item.remindDate))}
+        {this.renderWorkField('有效截止日期', this.formatDate(item.validUntil))}
+        {this.renderWorkField('下一步动作', item.nextAction)}
+        {this.renderWorkField('最近更新时间', this.formatUpdateTime(item.updatedTime) || this.formatDateTime(item.updatedTime))}
+      </div>
     </div>;
 }
 export function renderPanelTitle(title, marker, action) {
@@ -2106,6 +2700,15 @@ var styles = {
     background: '#FFFFFF',
     color: '#344054'
   },
+  iconButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px'
+  },
+  buttonIcon: {
+    flexShrink: 0
+  },
   buttonDisabled: {
     opacity: 0.56,
     cursor: 'not-allowed'
@@ -2314,26 +2917,28 @@ var styles = {
   },
   metricGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-    gap: '16px',
+    gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+    gap: '10px',
     marginBottom: '20px'
   },
   metricGridMobile: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(6, minmax(132px, 1fr))',
     gap: '10px',
-    marginBottom: '14px'
+    marginBottom: '14px',
+    overflowX: 'auto',
+    paddingBottom: '4px'
   },
   metricCard: {
-    minHeight: '106px',
+    minHeight: '96px',
     background: '#FFFFFF',
     border: '1px solid #EDF0F5',
     borderRadius: '14px',
     boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
-    padding: '20px',
+    gap: '10px',
+    padding: '14px',
     boxSizing: 'border-box',
     cursor: 'pointer'
   },
@@ -2341,8 +2946,8 @@ var styles = {
     cursor: 'pointer'
   },
   iconBox: {
-    width: '48px',
-    height: '48px',
+    width: '40px',
+    height: '40px',
     borderRadius: '8px',
     color: '#FFFFFF',
     display: 'flex',
@@ -2376,6 +2981,266 @@ var styles = {
     color: '#C5CBD3',
     fontSize: '28px',
     lineHeight: '28px'
+  },
+  workbench: {
+    background: '#FFFFFF',
+    border: '1px solid #D6E8FF',
+    borderRadius: '14px',
+    boxShadow: '0 10px 28px rgba(21, 94, 239, 0.08)',
+    padding: '20px',
+    marginBottom: '20px',
+    boxSizing: 'border-box'
+  },
+  workbenchHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '16px',
+    marginBottom: '16px'
+  },
+  workbenchHeadMobile: {
+    display: 'grid',
+    gap: '12px',
+    marginBottom: '14px'
+  },
+  workbenchTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  workbenchTitle: {
+    color: '#101828',
+    fontSize: '18px',
+    lineHeight: '26px',
+    fontWeight: 800
+  },
+  workbenchSub: {
+    color: '#667085',
+    fontSize: '13px',
+    lineHeight: '20px',
+    marginTop: '3px'
+  },
+  workInfoIcon: {
+    width: '16px',
+    height: '16px',
+    borderRadius: '50%',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#98A2B3',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    lineHeight: '14px',
+    fontWeight: 800,
+    cursor: 'help',
+    flexShrink: 0,
+    boxSizing: 'border-box'
+  },
+  workInfoIconActive: {
+    border: '1px solid #B9D6FF',
+    background: '#EFF6FF',
+    color: '#155EEF'
+  },
+  workInfoPanel: {
+    width: '320px',
+    maxWidth: '100%',
+    borderRadius: '10px',
+    border: '1px solid #D6E8FF',
+    background: '#FFFFFF',
+    boxShadow: '0 10px 28px rgba(16, 24, 40, 0.12)',
+    padding: '12px',
+    marginTop: '8px',
+    marginBottom: '10px',
+    color: '#344054',
+    boxSizing: 'border-box'
+  },
+  workInfoPanelTitle: {
+    color: '#101828',
+    fontSize: '13px',
+    lineHeight: '20px',
+    fontWeight: 800,
+    marginBottom: '6px'
+  },
+  workInfoPanelLine: {
+    color: '#475467',
+    fontSize: '12px',
+    lineHeight: '18px',
+    marginTop: '4px'
+  },
+  workRefreshButton: {
+    height: '34px',
+    borderRadius: '8px',
+    border: '1px solid #155EEF',
+    background: '#155EEF',
+    color: '#FFFFFF',
+    fontSize: '13px',
+    fontWeight: 700,
+    padding: '0 14px',
+    cursor: 'pointer',
+    outline: 'none',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box'
+  },
+  workTabs: {
+    display: 'flex',
+    gap: '8px',
+    overflowX: 'auto',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #EEF2F7',
+    marginBottom: '12px'
+  },
+  workTab: {
+    height: '34px',
+    borderRadius: '8px',
+    border: '1px solid #EAECF0',
+    background: '#FFFFFF',
+    color: '#475467',
+    padding: '0 10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    outline: 'none',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box'
+  },
+  workTabActive: {
+    border: '1px solid #155EEF',
+    background: '#EAF2FF',
+    color: '#155EEF'
+  },
+  workTabCount: {
+    minWidth: '20px',
+    height: '20px',
+    borderRadius: '10px',
+    background: '#F2F4F7',
+    color: '#667085',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    padding: '0 6px',
+    boxSizing: 'border-box'
+  },
+  workTabCountActive: {
+    background: '#155EEF',
+    color: '#FFFFFF'
+  },
+  workList: {
+    display: 'grid',
+    gap: '10px'
+  },
+  workItem: {
+    border: '1px solid #E5EAF3',
+    borderRadius: '10px',
+    background: '#FCFCFD',
+    padding: '14px',
+    boxSizing: 'border-box',
+    cursor: 'pointer'
+  },
+  workItemMuted: {
+    opacity: 0.72,
+    background: '#F8FAFC'
+  },
+  workItemHead: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '16px',
+    marginBottom: '12px'
+  },
+  workItemHeadMobile: {
+    display: 'grid',
+    gap: '10px',
+    marginBottom: '12px'
+  },
+  workTitleBlock: {
+    minWidth: 0,
+    flex: 1
+  },
+  workBadges: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginBottom: '8px'
+  },
+  workTitle: {
+    color: '#101828',
+    fontSize: '15px',
+    lineHeight: '22px',
+    fontWeight: 800,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  workRelation: {
+    color: '#667085',
+    fontSize: '12px',
+    lineHeight: '18px',
+    marginTop: '3px'
+  },
+  workMeta: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gap: '8px 12px'
+  },
+  workMetaMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '8px'
+  },
+  workField: {
+    minWidth: 0,
+    borderTop: '1px solid #EEF2F7',
+    paddingTop: '8px'
+  },
+  workFieldLabel: {
+    display: 'block',
+    color: '#98A2B3',
+    fontSize: '12px',
+    lineHeight: '17px',
+    marginBottom: '2px',
+    whiteSpace: 'nowrap'
+  },
+  workFieldValue: {
+    display: 'block',
+    color: '#344054',
+    fontSize: '13px',
+    lineHeight: '19px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  workActions: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    flexWrap: 'wrap',
+    flexShrink: 0
+  },
+  workActionButton: {
+    height: '30px',
+    borderRadius: '8px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#344054',
+    padding: '0 10px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    outline: 'none',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box'
+  },
+  workActionPrimary: {
+    border: '1px solid #155EEF',
+    background: '#155EEF',
+    color: '#FFFFFF'
   },
   dashboard: {
     display: 'grid',
@@ -2954,6 +3819,7 @@ export function renderJsx() {
             {_customState.error && <div style={styles.error}>{_customState.error}</div>}
             {this.renderMaintenancePanel(true)}
             {this.renderMetrics(metricGridStyle)}
+            {this.renderRelatedWorkbench(true)}
             <div style={dashboardStyle}>
               {this.renderAttentionPanel()}
               {this.renderVisitsPanel()}
@@ -2972,6 +3838,7 @@ export function renderJsx() {
             {_customState.error && <div style={styles.error}>{_customState.error}</div>}
             {this.renderMaintenancePanel(false)}
             {this.renderMetrics(metricGridStyle)}
+            {this.renderRelatedWorkbench(false)}
             <div style={dashboardStyle}>
               <div style={styles.gridOverdue}>{this.renderAttentionPanel()}</div>
               <div style={styles.gridVisits}>{this.renderVisitsPanel()}</div>

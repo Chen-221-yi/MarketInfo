@@ -261,6 +261,17 @@ export function forceUpdate() {
     timestamp: new Date().getTime()
   });
 }
+export function getCustomState(key) {
+  if (key) return _customState[key];
+  return Object.assign({}, _customState);
+}
+export function setCustomState(newState) {
+  Object.keys(newState || {}).forEach(key => {
+    _customState[key] = newState[key];
+  });
+  this.forceUpdate();
+}
+export function didUnmount() {}
 export function getLoginRoleTexts() {
   var values = [];
   var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
@@ -359,6 +370,11 @@ export function getErrorMessage(err) {
   if (!err) return '未知错误';
   return err.message || err.errorMsg || '未知错误';
 }
+export function getIsMobile() {
+  if (this.utils && this.utils.isMobile) return this.utils.isMobile();
+  if (typeof window !== 'undefined' && window.innerWidth) return window.innerWidth <= 768;
+  return false;
+}
 export function getUrlParam(name) {
   var params = this.state && this.state.urlParams || {};
   if (params && params[name]) return params[name];
@@ -432,12 +448,18 @@ export function formatValue(value) {
   if (typeof parsed === 'object') {
     var addressText = this.formatAddressValue(parsed);
     if (addressText !== '-') return addressText;
-    if (parsed.title) return parsed.title;
+    if (parsed.title) return this.formatValue(parsed.title);
     if (parsed.name) return this.formatValue(parsed.name);
     if (parsed.label) return this.formatValue(parsed.label);
     if (parsed.text) return this.formatValue(parsed.text);
     if (parsed.value !== undefined && parsed.value !== null && parsed.value !== '') return this.formatValue(parsed.value);
-    return parsed.zh_CN || parsed.pureEn_US || parsed.en_US || parsed.displayName || parsed.userName || parsed.nickName || '-';
+    if (parsed.zh_CN !== undefined && parsed.zh_CN !== null && parsed.zh_CN !== '') return this.formatValue(parsed.zh_CN);
+    if (parsed.pureEn_US !== undefined && parsed.pureEn_US !== null && parsed.pureEn_US !== '') return this.formatValue(parsed.pureEn_US);
+    if (parsed.en_US !== undefined && parsed.en_US !== null && parsed.en_US !== '') return this.formatValue(parsed.en_US);
+    if (parsed.displayName !== undefined && parsed.displayName !== null && parsed.displayName !== '') return this.formatValue(parsed.displayName);
+    if (parsed.userName !== undefined && parsed.userName !== null && parsed.userName !== '') return this.formatValue(parsed.userName);
+    if (parsed.nickName !== undefined && parsed.nickName !== null && parsed.nickName !== '') return this.formatValue(parsed.nickName);
+    return '-';
   }
   return parsed;
 }
@@ -501,7 +523,7 @@ export function associationText(value) {
   if (!items.length) return this.formatValue(value);
   return items.map(item => {
     if (typeof item !== 'object') return this.formatValue(item);
-    return item.title || item.name || item.label || item.text || '-';
+    return this.formatValue(item.title || item.name || item.label || item.text || '-');
   }).join('、');
 }
 export function rowMatchesAssociation(row, fieldId, id) {
@@ -971,7 +993,7 @@ export function getAlbumImageUrl(image) {
 }
 export function getAlbumImageName(image, index) {
   var parsed = this.parseMaybeJson(image);
-  if (parsed && typeof parsed === 'object') return parsed.name || parsed.fileName || parsed.title || '照片 ' + (index + 1);
+  if (parsed && typeof parsed === 'object') return this.formatValue(parsed.name || parsed.fileName || parsed.title || '照片 ' + (index + 1));
   return '照片 ' + (index + 1);
 }
 export function getAlbumImageCards(contact) {
@@ -1248,10 +1270,10 @@ export function getContributor(row, fieldId) {
       name: value
     };
   }
-  var name = value.name || value.userName || value.nickName || value.label || value.text || value.displayName || value.value || '未识别记录人';
+  var name = this.formatValue(value.name || value.userName || value.nickName || value.label || value.text || value.displayName || value.value || '未识别记录人');
   var key = value.userId || value.employeeId || value.id || value.workNo || value.value || name;
   return {
-    key: key || name,
+    key: this.formatValue(key || name),
     name: name
   };
 }
@@ -4083,7 +4105,7 @@ var styles = {
 };
 export function renderJsx() {
   var timestamp = this.state && this.state.timestamp;
-  var isMobile = this.utils.isMobile();
+  var isMobile = this.getIsMobile();
   var contact = this.getContact();
   if (_customState.accessDenied) {
     return <div style={styles.page}>

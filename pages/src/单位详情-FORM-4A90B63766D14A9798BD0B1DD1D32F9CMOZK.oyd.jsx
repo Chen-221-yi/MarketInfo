@@ -4,6 +4,7 @@ var FORMS = {
   unitManage: 'FORM-CA9908793C7C4EA3997B43B5BF5FAA34KEAC',
   unitDetail: 'FORM-4A90B63766D14A9798BD0B1DD1D32F9CMOZK',
   unit: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8',
+  regionDictionary: 'FORM-9817CBABC63B459AB71A1779C39E23804ST4',
   projectDetail: 'FORM-3367C1CD6BDB4FE995BCA69ECFF03419Q0A4',
   project: 'FORM-DC58D4D9EB714ACBB421A34ADFB418ABJCVO',
   contactDetail: 'FORM-89CA116EA0134CACB77EAA0F87AA7AB8MD1C',
@@ -19,10 +20,18 @@ var FIELDS = {
     type: 'selectField_gqbk4xyoq',
     system: 'selectField_gqbk5upc2',
     region: 'addressField_mq52xi6b',
+    businessRegion: 'associationFormField_pfbg1n6ti',
     level: 'selectField_gqbk73418',
     address: 'addressField_gqbk80a21',
     business: 'textareaField_gqbk9dwrh',
     remark: 'textareaField_gqbkbwydj'
+  },
+  region: {
+    name: 'textField_mo8h1sjpw',
+    fullName: 'textField_mo8i2fsot',
+    level: 'selectField_mo8i46xcf',
+    isSelf: 'selectField_mo8i51eya',
+    mapName: 'textField_mo8i677rw'
   },
   contact: {
     unit: 'associationFormField_ibw594k2s',
@@ -68,6 +77,7 @@ var _customState = {
   unitId: '',
   activeTab: 'overview',
   units: [],
+  regions: [],
   contacts: [],
   projects: [],
   visits: []
@@ -138,13 +148,14 @@ export function loadData() {
   _customState.loading = true;
   _customState.error = '';
   this.forceUpdate();
-  Promise.all([self.fetchRows(FORMS.unit), self.fetchRows(FORMS.contact), self.fetchRows(FORMS.project), self.fetchRows(FORMS.visit), self.fetchUnitById(_customState.unitId)]).then(res => {
+  Promise.all([self.fetchRows(FORMS.unit), self.fetchAllRows(FORMS.regionDictionary), self.fetchRows(FORMS.contact), self.fetchRows(FORMS.project), self.fetchRows(FORMS.visit), self.fetchUnitById(_customState.unitId)]).then(res => {
     _customState.units = self.normalizeRows(res[0]);
-    _customState.contacts = self.normalizeRows(res[1]);
-    _customState.projects = self.normalizeRows(res[2]);
-    _customState.visits = self.normalizeRows(res[3]);
-    if (res[4] && !self.findById(_customState.units, _customState.unitId)) {
-      _customState.units.unshift(res[4]);
+    _customState.regions = res[1].rows || self.normalizeRows(res[1]);
+    _customState.contacts = self.normalizeRows(res[2]);
+    _customState.projects = self.normalizeRows(res[3]);
+    _customState.visits = self.normalizeRows(res[4]);
+    if (res[5] && !self.findById(_customState.units, _customState.unitId)) {
+      _customState.units.unshift(res[5]);
     }
     if (!_customState.unitId && _customState.units.length) {
       _customState.unitId = self.getRowId(_customState.units[0]);
@@ -174,6 +185,32 @@ export function fetchRows(formUuid) {
     });
     throw err;
   });
+}
+export function fetchAllRows(formUuid) {
+  var self = this;
+  var pageSize = 100;
+  var allRows = [];
+  var total = 0;
+  var fetchPage = page => {
+    return self.utils.yida.searchFormDatas({
+      formUuid: formUuid,
+      currentPage: page,
+      pageSize: pageSize
+    }).then(res => {
+      var rows = self.normalizeRows(res);
+      total = res && res.totalCount || res && res.content && res.content.totalCount || allRows.length + rows.length;
+      allRows = allRows.concat(rows);
+      if (rows.length >= pageSize && allRows.length < total) return fetchPage(page + 1);
+      return {
+        rows: allRows,
+        total: total || allRows.length
+      };
+    });
+  };
+  return fetchPage(1).catch(() => ({
+    rows: [],
+    total: 0
+  }));
 }
 export function normalizeSingleRow(res) {
   if (!res) return null;
@@ -305,7 +342,44 @@ export function collectRegionParts(value, parts) {
   }
   this.appendRegionText(parts, parsed);
 }
+export function findRegionById(id) {
+  if (!id) return null;
+  var matched = _customState.regions.filter(row => this.getRowId(row) === id);
+  return matched[0] || null;
+}
+export function findRegionByText(text) {
+  var value = String(text || '').trim();
+  if (!value || value === '-' || value === '--') return null;
+  var normalized = value.replace(/\s*\/\s*/g, ' / ');
+  var matched = _customState.regions.filter(row => {
+    return this.getValue(row, FIELDS.region.fullName) === normalized || this.getValue(row, FIELDS.region.name) === value;
+  });
+  return matched[0] || null;
+}
+export function getBusinessRegionRecord(row) {
+  var raw = this.rawAssociation(row, FIELDS.unit.businessRegion);
+  var parsed = this.parseMaybeJson(raw);
+  var item = Array.isArray(parsed) ? parsed[0] : parsed;
+  if (item && typeof item === 'object') {
+    var id = item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
+    var byId = this.findRegionById(id);
+    if (byId) return byId;
+    var byText = this.findRegionByText(this.formatValue(item));
+    if (byText) return byText;
+  }
+  return this.findRegionById(raw) || this.findRegionByText(this.formatValue(raw));
+}
+export function getBusinessRegionParts(row) {
+  var regionRow = this.getBusinessRegionRecord(row);
+  if (!regionRow) return [];
+  var fullName = this.getValue(regionRow, FIELDS.region.fullName);
+  var regionName = this.getValue(regionRow, FIELDS.region.name);
+  var parts = fullName && fullName !== '-' ? fullName.split(/\s*\/\s*/).filter(Boolean) : [regionName].filter(Boolean);
+  return parts.slice(0, 3);
+}
 export function getAddressRegionParts(row) {
+  var businessParts = this.getBusinessRegionParts(row);
+  if (businessParts.length) return businessParts;
   var candidates = [this.rawValue(row, FIELDS.unit.region), this.rawValue(row, FIELDS.unit.region + '_id')];
   for (var i = 0; i < candidates.length; i += 1) {
     var parts = [];
