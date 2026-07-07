@@ -216,7 +216,7 @@ var TAB_ITEMS = [{
   icon: 'bell'
 }, {
   key: 'intel',
-  label: '情报线索',
+  label: '市场线索',
   icon: 'info'
 }];
 var _customState = {
@@ -1561,22 +1561,8 @@ export function saveContactTags() {
 }
 export function openVisitForm() {
   var contact = this.getContact();
-  var id = this.getRowId(contact);
-  var params = {};
-  if (id) {
-    params.contactId = id;
-    params.mainContactId = id;
-    params.contactTitle = this.getValue(contact, FIELDS.contact.name);
-    var contactNo = this.getValue(contact, FIELDS.contact.serial);
-    if (contactNo && contactNo !== '-') {
-      params.contactNo = contactNo;
-    }
-    var unitId = this.getAssociationId(this.rawAssociation(contact, FIELDS.contact.unit));
-    if (unitId) {
-      params.unitId = unitId;
-      params.unitTitle = this.getUnitName(contact);
-    }
-  }
+  var params = this.getContactContextOpenParams(contact);
+  if (params.contactId) params.mainContactId = params.contactId;
   this.openSubmissionForm(FORMS.visit, params);
 }
 export function openVisitDetail(row) {
@@ -1588,20 +1574,7 @@ export function openVisitDetail(row) {
 }
 export function openCareerForm() {
   var contact = this.getContact();
-  var id = this.getRowId(contact);
-  if (!id) {
-    this.openSubmissionForm(FORMS.career, {});
-    return;
-  }
-  var params = {
-    contactId: id,
-    contactTitle: this.getValue(contact, FIELDS.contact.name)
-  };
-  var contactNo = this.getValue(contact, FIELDS.contact.serial);
-  if (contactNo && contactNo !== '-') {
-    params.contactNo = contactNo;
-  }
-  this.openSubmissionForm(FORMS.career, params);
+  this.openSubmissionForm(FORMS.career, this.getContactContextOpenParams(contact));
 }
 export function openCareerDetail(row) {
   var id = this.getRowId(row);
@@ -1618,11 +1591,7 @@ export function openProjectDetail(row) {
 }
 export function openRelationForm() {
   var contact = this.getContact();
-  var id = this.getRowId(contact);
-  this.openSubmissionForm(FORMS.relation, id ? {
-    contactId: id,
-    contactTitle: this.getValue(contact, FIELDS.contact.name)
-  } : {});
+  this.openSubmissionForm(FORMS.relation, this.getContactContextOpenParams(contact));
 }
 export function openRelationDetail(row) {
   var id = this.getRowId(row);
@@ -1642,6 +1611,27 @@ export function getContactOpenParams(contact) {
   }
   return params;
 }
+export function getContactContextOpenParams(contact) {
+  var params = this.getContactOpenParams(contact);
+  if (!contact || !this.getRowId(contact)) return params;
+  var unitId = this.getAssociationId(this.rawAssociation(contact, FIELDS.contact.unit));
+  if (unitId) {
+    params.unitId = unitId;
+    params.unitTitle = this.getUnitName(contact);
+  }
+  var department = this.getValue(contact, FIELDS.contact.department);
+  if (department && department !== '-') params.department = department;
+  var position = this.getValue(contact, FIELDS.contact.position);
+  if (position && position !== '-') {
+    params.position = position;
+    params.contactPosition = position;
+  }
+  var level = this.getValue(contact, FIELDS.contact.level);
+  if (level && level !== '-') params.level = level;
+  var region = this.getValue(contact, FIELDS.contact.region);
+  if (region && region !== '-') params.region = region;
+  return params;
+}
 export function openPrivateProfileForm() {
   var contact = this.getContact();
   var profile = this.getCurrentPrivateProfile(contact);
@@ -1650,36 +1640,12 @@ export function openPrivateProfileForm() {
     this.openNativeEditForm(FORMS.privateProfile, id);
     return;
   }
-  if (!contact || !this.getRowId(contact) || _customState.privateProfileSaving) return;
-  var payload = {};
-  payload[FIELDS.privateProfile.contact] = this.buildContactAssociation(contact);
-  payload[FIELDS.privateProfile.permission] = '授权';
-  _customState.privateProfileSaving = true;
-  this.forceUpdate();
-  this.utils.yida.saveFormData({
-    appType: APP_TYPE,
-    formUuid: FORMS.privateProfile,
-    formDataJson: JSON.stringify(payload)
-  }).then(() => {
-    return this.loadForm(FORMS.privateProfile, 'privateProfiles');
-  }).then(() => {
-    _customState.privateProfileSaving = false;
-    this.forceUpdate();
-    var created = this.getCurrentPrivateProfile(contact);
-    var createdId = this.getRowId(created);
-    if (createdId) this.openNativeEditForm(FORMS.privateProfile, createdId);
-  }).catch(error => {
-    _customState.privateProfileSaving = false;
-    this.forceUpdate();
-    this.utils.toast({
-      title: this.getErrorMessage(error) || '私密画像创建失败',
-      type: 'error'
-    });
-  });
+  if (!contact || !this.getRowId(contact)) return;
+  this.openSubmissionForm(FORMS.privateProfile, this.getContactContextOpenParams(contact));
 }
 export function openSocialRelationForm() {
   var contact = this.getContact();
-  this.openSubmissionForm(FORMS.socialRelation, this.getContactOpenParams(contact));
+  this.openSubmissionForm(FORMS.socialRelation, this.getContactContextOpenParams(contact));
 }
 export function openSocialRelationDetail(row) {
   var id = this.getRowId(row);
@@ -1690,7 +1656,7 @@ export function openSocialRelationDetail(row) {
 }
 export function openReminderForm() {
   var contact = this.getContact();
-  this.openSubmissionForm(FORMS.reminder, this.getContactOpenParams(contact));
+  this.openSubmissionForm(FORMS.reminder, this.getContactContextOpenParams(contact));
 }
 export function openReminderDetail(row) {
   var id = this.getRowId(row);
@@ -1701,7 +1667,7 @@ export function openReminderDetail(row) {
 }
 export function openIntelForm() {
   var contact = this.getContact();
-  this.openSubmissionForm(FORMS.intel, this.getContactOpenParams(contact));
+  this.openSubmissionForm(FORMS.intel, this.getContactContextOpenParams(contact));
 }
 export function openIntelDetail(row) {
   var id = this.getRowId(row);
@@ -2501,7 +2467,7 @@ export function renderDatesTab(contact) {
 export function renderIntelTab(contact) {
   var intel = this.getRelatedIntel(contact);
   return <div style={styles.stack}>
-      {this.renderTabHeader('情报线索', '添加线索', e => {
+      {this.renderTabHeader('市场线索', '添加线索', e => {
       this.openIntelForm();
     }, false)}
       {intel.length ? intel.map(row => <div key={this.getRowId(row)} style={Object.assign({}, styles.cardItem, styles.clickableCard)} onClick={e => {
@@ -2518,7 +2484,7 @@ export function renderIntelTab(contact) {
           <div style={styles.itemMeta}>{this.getValue(row, FIELDS.intel.category)} · 提醒：{this.formatDate(this.rawValue(row, FIELDS.intel.remindDate))} · 有效期：{this.formatDate(this.rawValue(row, FIELDS.intel.validUntil))}</div>
           <div style={styles.itemText}>{this.getValue(row, FIELDS.intel.content)}</div>
           {this.getValue(row, FIELDS.intel.nextAction) !== '-' && <div style={styles.itemNext}>下一步：{this.getValue(row, FIELDS.intel.nextAction)}</div>}
-        </div>) : this.renderEmpty('暂无情报线索')}
+        </div>) : this.renderEmpty('暂无市场线索')}
     </div>;
 }
 export function renderTabContent(contact, isMobile) {

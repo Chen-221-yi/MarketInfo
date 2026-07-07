@@ -696,11 +696,40 @@ export function getAssociationParam(rawValue, idName, titleName, params) {
   if (id) params[idName] = id;
   if (title && title !== '-') params[titleName] = title;
 }
+export function addLeadContextParams(row, params) {
+  var leadId = this.getRowId(row);
+  if (leadId) {
+    params.leadId = leadId;
+    params.sourceLeadId = leadId;
+  }
+  params.leadTitle = this.getLeadTitle(row);
+  var content = this.getValue(row, FIELDS.lead.content);
+  if (content && content !== '-') params.leadContent = content;
+  var type = this.getValue(row, FIELDS.lead.type);
+  if (type && type !== '-') params.leadType = type;
+  var importance = this.getValue(row, FIELDS.lead.importance);
+  if (importance && importance !== '-') params.leadImportance = importance;
+  var sourceType = this.getValue(row, FIELDS.lead.sourceType);
+  if (sourceType && sourceType !== '-') params.leadSourceType = sourceType;
+  var expectedTime = this.getValue(row, FIELDS.lead.expectedTime);
+  if (expectedTime && expectedTime !== '-') params.leadExpectedTime = expectedTime;
+  var nextAction = this.getValue(row, FIELDS.lead.nextAction);
+  if (nextAction && nextAction !== '-') params.leadNextAction = nextAction;
+  var remindDate = this.rawValue(row, FIELDS.lead.remindDate);
+  if (remindDate) params.leadRemindDate = remindDate;
+  var validUntil = this.rawValue(row, FIELDS.lead.validUntil);
+  if (validUntil) params.leadValidUntil = validUntil;
+  var owner = this.getValue(row, FIELDS.lead.owner);
+  if (owner && owner !== '-') params.leadOwner = owner;
+  var handlers = this.getValue(row, FIELDS.lead.handlers);
+  if (handlers && handlers !== '-') params.leadHandlers = handlers;
+  var watchers = this.getValue(row, FIELDS.lead.watchers);
+  if (watchers && watchers !== '-') params.leadWatchers = watchers;
+}
 export function openAddVisitFromLead(row) {
   if (!row) return;
   var params = {};
-  params.leadId = this.getRowId(row);
-  params.leadTitle = this.getLeadTitle(row);
+  this.addLeadContextParams(row, params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.contact), 'contactId', 'contactTitle', params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.unit), 'unitId', 'unitTitle', params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.mainProject), 'projectId', 'projectTitle', params);
@@ -774,10 +803,7 @@ export function saveCloseLead() {
   });
 }
 export function openTransferModal(row) {
-  if (!row) return;
-  _customState.transferModalOpen = true;
-  _customState.transferTargetId = this.getRowId(row);
-  this.forceUpdate();
+  this.openProjectCreateFromLead(row);
 }
 export function closeTransferModal() {
   _customState.transferModalOpen = false;
@@ -787,18 +813,41 @@ export function closeTransferModal() {
 export function getTransferLead() {
   return this.findById(_customState.leads, _customState.transferTargetId);
 }
+export function openFirstProjectFromLead(row) {
+  var projects = this.getLeadProjects(row);
+  if (projects.length) {
+    this.openProjectDetail(projects[0]);
+    return;
+  }
+  this.utils.toast({
+    title: '未找到已关联项目，请在线索详情中核对关联关系。',
+    type: 'warning'
+  });
+}
+export function openProjectCreateFromLead(row) {
+  if (!row) return;
+  if (this.isLeadTransferred(row)) {
+    this.openFirstProjectFromLead(row);
+    return;
+  }
+  if (this.isLeadClosed(row)) {
+    this.utils.toast({
+      title: '已关闭线索不能转为项目',
+      type: 'warning'
+    });
+    return;
+  }
+  var params = {};
+  params.mode = 'leadConvert';
+  this.addLeadContextParams(row, params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.contact), 'contactId', 'contactTitle', params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.unit), 'unitId', 'unitTitle', params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.mainProject), 'sourceProjectId', 'sourceProjectTitle', params);
+  this.utils.router.push(FORMS.projectManage, params, false);
+}
 export function openProjectSubmissionFromLead() {
   var row = this.getTransferLead();
-  if (!row) return;
-  this.utils.toast({
-    title: '将打开项目原生新增页；来源线索字段需在原生表单中确认',
-    type: 'notice'
-  });
-  this.openSubmissionForm(FORMS.project, {
-    leadId: this.getRowId(row),
-    sourceLeadId: this.getRowId(row),
-    leadTitle: this.getLeadTitle(row)
-  });
+  this.openProjectCreateFromLead(row);
 }
 export function openProjectManageForLink() {
   this.utils.toast({
@@ -876,7 +925,7 @@ export function renderHero(isMobile) {
 }
 export function renderProcessBar(activeValue) {
   var isMobile = this.utils && this.utils.isMobile && this.utils.isMobile();
-  var steps = [{ label: '来源拜访', value: 'source', icon: '访' }, { label: '创建线索', value: 'create', icon: '线' }, { label: '指派协作', value: 'assign', icon: '协' }, { label: '持续跟进', value: 'follow', icon: '进' }, { label: '转项目 / 关闭', value: 'finish', icon: '转' }];
+  var steps = [{ label: '来源拜访', value: 'source', icon: '访' }, { label: '创建线索', value: 'create', icon: '线' }, { label: '指派协作', value: 'assign', icon: '协' }, { label: '持续跟进', value: 'follow', icon: '进' }, { label: '转为项目 / 关闭', value: 'finish', icon: '转' }];
   var activeIndex = 0;
   steps.forEach((step, index) => {
     if (step.value === activeValue) activeIndex = index;
@@ -982,7 +1031,7 @@ export function renderFilterBar(isMobile) {
         this.applyDateFilter();
       })}
       </div>
-      <div style={styles.filterNote}>说明：线索来源于拜访、电话、微信或公开信息；进入“待我跟进”表示已指派到人；推进成熟后可转项目，失效机会需规范关闭。</div>
+      <div style={styles.filterNote}>说明：线索来源于拜访、电话、微信或公开信息；进入“待我跟进”表示已指派到人；推进成熟后可转为项目，失效机会需规范关闭。</div>
     </div>;
 }
 export function renderInfoItem(label, value) {
@@ -1044,6 +1093,7 @@ export function renderLeadCard(row, isMobile) {
   var title = this.getLeadTitle(row);
   var serial = this.getValue(row, FIELDS.lead.serial);
   var closed = status === '已关闭';
+  var transferred = this.isLeadTransferred(row);
   var planDate = this.formatDate(this.rawValue(row, FIELDS.lead.remindDate));
   var compactCard = isMobile || (typeof window !== 'undefined' && window.innerWidth < 1180);
   return <div key={this.getRowId(row)} style={this.getLeadCardStyle(row)}>
@@ -1085,8 +1135,10 @@ export function renderLeadCard(row, isMobile) {
               {this.renderButton('记录跟进', 'default', e => {
               self.openAddVisitFromLead(row);
             })}
-              {closed ? this.renderDisabledButton('转项目') : this.renderButton('转项目', 'success', e => {
-              self.openTransferModal(row);
+              {transferred ? this.renderButton('查看项目', 'success', e => {
+              self.openFirstProjectFromLead(row);
+            }) : closed ? this.renderDisabledButton('转为项目') : this.renderButton('转为项目', 'success', e => {
+              self.openProjectCreateFromLead(row);
             })}
               {closed ? this.renderDisabledButton('关闭线索') : this.renderButton('关闭线索', 'softDanger', e => {
               self.openCloseModal(row);
@@ -1162,34 +1214,7 @@ export function renderCloseModal() {
     </div>;
 }
 export function renderTransferModal() {
-  if (!_customState.transferModalOpen) return null;
-  var self = this;
-  var row = this.getTransferLead();
-  return <div style={styles.modalMask}>
-      <div style={styles.modal}>
-        <div style={styles.modalHead}>
-          <div>
-            <div style={styles.modalTitle}>转项目 / 关联项目</div>
-            <div style={styles.modalSub}>{row ? this.getLeadTitle(row) : ''}</div>
-          </div>
-          <button type="button" onClick={e => {
-          self.closeTransferModal();
-        }} style={styles.iconButton}>×</button>
-        </div>
-        <div style={styles.tipBox}>本阶段使用轻量流程：项目通过“来源线索”字段回连市场线索。项目原生表单当前未验证可靠自动预填来源线索，请在原生表单中确认该字段。</div>
-        <div style={styles.modalActionsLeft}>
-          {this.renderButton('打开项目原生新增表单', 'primary', e => {
-          self.openProjectSubmissionFromLead();
-        })}
-          {this.renderButton('关联已有项目', 'default', e => {
-          self.openProjectManageForLink();
-        })}
-          {this.renderButton('取消', 'default', e => {
-          self.closeTransferModal();
-        })}
-        </div>
-      </div>
-    </div>;
+  return null;
 }
 var styles = {
   page: {

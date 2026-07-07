@@ -3,6 +3,7 @@ var APP_TYPE = 'APP_LC7BU43GCVLSI0TH8POE';
 var FORMS = {
   projectManage: 'FORM-CAC6AFFA0A3341B598561F68EE7B4B8BTZGB',
   projectDetail: 'FORM-3367C1CD6BDB4FE995BCA69ECFF03419Q0A4',
+  leadDetail: 'FORM-48EA952D879B4D1D94580C2EA14B7AE43HM9',
   project: 'FORM-DC58D4D9EB714ACBB421A34ADFB418ABJCVO',
   unitDetail: 'FORM-4A90B63766D14A9798BD0B1DD1D32F9CMOZK',
   unit: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8',
@@ -36,7 +37,8 @@ var FIELDS = {
     recent: 'textareaField_jpjnk9q1c',
     recentDate: 'dateField_jpjnl71j3',
     status: 'selectField_jpjnm9c66',
-    remark: 'textareaField_jpjnn9kdi'
+    remark: 'textareaField_jpjnn9kdi',
+    sourceLead: 'associationFormField_o8c51p6t3'
   },
   relation: {
     project: 'associationFormField_m7me25hdh',
@@ -381,6 +383,13 @@ export function openUnit(project) {
     unitId: id
   }, false);
 }
+export function openSourceLead(project) {
+  var id = this.getAssociationId(this.rawAssociation(project, FIELDS.project.sourceLead));
+  if (!id) return;
+  this.utils.router.push(FORMS.leadDetail, {
+    leadId: id
+  }, false);
+}
 export function openContact(row) {
   var id = this.getAssociationId(this.rawAssociation(row, FIELDS.relation.contact));
   if (!id) return;
@@ -397,10 +406,22 @@ export function openVisit(row) {
 }
 export function createRelation(project) {
   var id = this.getRowId(project);
-  this.openSubmissionForm(FORMS.relation, {
+  var params = {
     projectId: id,
     projectTitle: this.getValue(project, FIELDS.project.name)
-  });
+  };
+  var unitId = this.getAssociationId(this.rawAssociation(project, FIELDS.project.unit));
+  if (unitId) {
+    params.unitId = unitId;
+    params.unitTitle = this.getAssociationText(project, FIELDS.project.unit);
+  }
+  var owner = this.getValue(project, FIELDS.project.owner);
+  if (owner && owner !== '-') params.projectOwner = owner;
+  var phase = this.getValue(project, FIELDS.project.phase);
+  if (phase && phase !== '-') params.projectPhase = phase;
+  var status = this.getValue(project, FIELDS.project.status);
+  if (status && status !== '-') params.projectStatus = status;
+  this.openSubmissionForm(FORMS.relation, params);
 }
 export function createVisit(project) {
   var id = this.getRowId(project);
@@ -408,6 +429,14 @@ export function createVisit(project) {
     projectId: id,
     projectTitle: this.getValue(project, FIELDS.project.name)
   };
+  var projectCode = this.getValue(project, FIELDS.project.code);
+  if (projectCode && projectCode !== '-') params.projectCode = projectCode;
+  var projectRegion = this.getValue(project, FIELDS.project.region);
+  if (projectRegion && projectRegion !== '-') params.projectRegion = projectRegion;
+  var owner = this.getValue(project, FIELDS.project.owner);
+  if (owner && owner !== '-') params.projectOwner = owner;
+  var nextAction = this.getValue(project, FIELDS.project.nextAction);
+  if (nextAction && nextAction !== '-') params.projectNextAction = nextAction;
   var unitId = this.getAssociationId(this.rawAssociation(project, FIELDS.project.unit));
   if (unitId) {
     params.unitId = unitId;
@@ -553,6 +582,7 @@ export function renderHero(project, relations, visits, isMobile) {
   var phase = this.getValue(project, FIELDS.project.phase);
   var status = this.getValue(project, FIELDS.project.status);
   var unit = this.getAssociationText(project, FIELDS.project.unit);
+  var sourceLead = this.getAssociationText(project, FIELDS.project.sourceLead);
   var owner = this.getValue(project, FIELDS.project.owner);
   var members = this.getValue(project, FIELDS.project.members);
   var star = this.getValue(project, FIELDS.project.star);
@@ -570,6 +600,9 @@ export function renderHero(project, relations, visits, isMobile) {
             {unit !== '-' && <button style={styles.unitLink} onClick={e => {
             this.openUnit(project);
           }}>{unit}</button>}
+            {sourceLead !== '-' && <button style={styles.unitLink} onClick={e => {
+            this.openSourceLead(project);
+          }}>来源线索：{sourceLead}</button>}
             <span>负责人：{owner}</span>
             {members !== '-' && <span>团队：{members}</span>}
           </div>
@@ -586,6 +619,7 @@ export function renderHero(project, relations, visits, isMobile) {
         {this.renderSummaryCard('关联联系人', relations.length, '位关键人员', 'primary')}
         {this.renderSummaryCard('拜访记录', visits.length, '条相关记录', 'purple')}
         {this.renderSummaryCard('下一步', this.getValue(project, FIELDS.project.nextAction), this.formatDate(this.rawValue(project, FIELDS.project.nextDate)), 'warning')}
+        {this.renderSummaryCard('来源线索', sourceLead, '可追溯市场线索', 'primary')}
       </div>
     </div>;
 }
@@ -991,7 +1025,7 @@ var styles = {
   },
   summaryGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: '12px',
     marginTop: '20px'
   },

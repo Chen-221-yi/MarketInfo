@@ -519,12 +519,41 @@ export function getAssociationParam(rawValue, idName, titleName, params) {
   if (id) params[idName] = id;
   if (title) params[titleName] = title;
 }
+export function addLeadContextParams(row, params) {
+  var leadId = this.getRowId(row);
+  if (leadId) {
+    params.leadId = leadId;
+    params.sourceLeadId = leadId;
+  }
+  params.leadTitle = this.getLeadTitle(row);
+  var content = this.getValue(row, FIELDS.lead.content);
+  if (content && content !== '-') params.leadContent = content;
+  var type = this.getValue(row, FIELDS.lead.type);
+  if (type && type !== '-') params.leadType = type;
+  var importance = this.getValue(row, FIELDS.lead.importance);
+  if (importance && importance !== '-') params.leadImportance = importance;
+  var sourceType = this.getValue(row, FIELDS.lead.sourceType);
+  if (sourceType && sourceType !== '-') params.leadSourceType = sourceType;
+  var expectedTime = this.getValue(row, FIELDS.lead.expectedTime);
+  if (expectedTime && expectedTime !== '-') params.leadExpectedTime = expectedTime;
+  var nextAction = this.getValue(row, FIELDS.lead.nextAction);
+  if (nextAction && nextAction !== '-') params.leadNextAction = nextAction;
+  var remindDate = this.rawValue(row, FIELDS.lead.remindDate);
+  if (remindDate) params.leadRemindDate = remindDate;
+  var validUntil = this.rawValue(row, FIELDS.lead.validUntil);
+  if (validUntil) params.leadValidUntil = validUntil;
+  var owner = this.getValue(row, FIELDS.lead.owner);
+  if (owner && owner !== '-') params.leadOwner = owner;
+  var handlers = this.getValue(row, FIELDS.lead.handlers);
+  if (handlers && handlers !== '-') params.leadHandlers = handlers;
+  var watchers = this.getValue(row, FIELDS.lead.watchers);
+  if (watchers && watchers !== '-') params.leadWatchers = watchers;
+}
 export function openAddVisit() {
   var row = this.getLead();
   if (!row) return;
   var params = {};
-  params.leadId = this.getRowId(row);
-  params.leadTitle = this.getLeadTitle(row);
+  this.addLeadContextParams(row, params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.contact), 'contactId', 'contactTitle', params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.unit), 'unitId', 'unitTitle', params);
   this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.mainProject), 'projectId', 'projectTitle', params);
@@ -601,25 +630,46 @@ export function saveCloseLead() {
   });
 }
 export function openTransferModal() {
-  _customState.transferModalOpen = true;
-  this.forceUpdate();
+  this.openProjectCreateFromLead(this.getLead());
 }
 export function closeTransferModal() {
   _customState.transferModalOpen = false;
   this.forceUpdate();
 }
-export function openProjectSubmissionFromLead() {
-  var row = this.getLead();
-  if (!row) return;
+export function openFirstProjectFromLead(row) {
+  var projects = this.getLeadProjects(row);
+  if (projects.length) {
+    this.openProjectDetail(projects[0]);
+    return;
+  }
   this.utils.toast({
-    title: '将打开项目原生新增页；来源线索字段需在原生表单中确认',
-    type: 'notice'
+    title: '未找到已关联项目，请核对关联关系。',
+    type: 'warning'
   });
-  this.openSubmissionForm(FORMS.project, {
-    leadId: this.getRowId(row),
-    sourceLeadId: this.getRowId(row),
-    leadTitle: this.getLeadTitle(row)
-  });
+}
+export function openProjectCreateFromLead(row) {
+  if (!row) return;
+  if (this.getLeadProjects(row).length > 0 || this.getValue(row, FIELDS.lead.status) === '已转项目') {
+    this.openFirstProjectFromLead(row);
+    return;
+  }
+  if (this.getValue(row, FIELDS.lead.status) === '已关闭') {
+    this.utils.toast({
+      title: '已关闭线索不能转为项目',
+      type: 'warning'
+    });
+    return;
+  }
+  var params = {};
+  params.mode = 'leadConvert';
+  this.addLeadContextParams(row, params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.contact), 'contactId', 'contactTitle', params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.unit), 'unitId', 'unitTitle', params);
+  this.getAssociationParam(this.rawAssociation(row, FIELDS.lead.mainProject), 'sourceProjectId', 'sourceProjectTitle', params);
+  this.utils.router.push(FORMS.projectManage, params, false);
+}
+export function openProjectSubmissionFromLead() {
+  this.openProjectCreateFromLead(this.getLead());
 }
 export function openProjectManageForLink() {
   this.utils.toast({
@@ -697,6 +747,7 @@ export function renderHero(row, isMobile) {
   var maturity = this.getValue(row, FIELDS.lead.maturity);
   var type = this.getValue(row, FIELDS.lead.type);
   var serial = this.getValue(row, FIELDS.lead.serial);
+  var transferred = this.getLeadProjects(row).length > 0 || status === '已转项目';
   return <div style={isMobile ? styles.heroMobile : styles.hero}>
       <div style={styles.heroMain}>
         <div style={styles.titleLine}>
@@ -718,8 +769,10 @@ export function renderHero(row, isMobile) {
         {this.renderButton('指派协作', 'default', e => {
         this.openAssignCollaboration();
       })}
-        {this.renderButton('转项目 / 关联项目', 'default', e => {
-        this.openTransferModal();
+        {transferred ? this.renderButton('查看项目', 'primary', e => {
+        this.openFirstProjectFromLead(row);
+      }) : this.renderButton('转为项目', 'default', e => {
+        this.openProjectCreateFromLead(row);
       })}
         {this.renderButton('关闭线索', status === '已关闭' ? 'weak' : 'softDanger', e => {
         this.openCloseModal();
@@ -733,7 +786,7 @@ export function renderHero(row, isMobile) {
 export function renderProcessBar(row) {
   var isMobile = this.utils && this.utils.isMobile && this.utils.isMobile();
   var activeValue = this.getActiveStep(row);
-  var steps = [{ label: '来源拜访', value: 'source', icon: '访' }, { label: '创建线索', value: 'create', icon: '线' }, { label: '指派协作', value: 'assign', icon: '协' }, { label: '持续跟进', value: 'follow', icon: '进' }, { label: '转项目 / 关闭', value: 'finish', icon: '转' }];
+  var steps = [{ label: '来源拜访', value: 'source', icon: '访' }, { label: '创建线索', value: 'create', icon: '线' }, { label: '指派协作', value: 'assign', icon: '协' }, { label: '持续跟进', value: 'follow', icon: '进' }, { label: '转为项目 / 关闭', value: 'finish', icon: '转' }];
   var activeIndex = 0;
   steps.forEach((step, index) => {
     if (step.value === activeValue) activeIndex = index;
@@ -956,8 +1009,8 @@ export function renderProjectsSection(row, isMobile) {
   var maturity = this.getValue(row, FIELDS.lead.maturity);
   return this.renderSection('E. 关联项目', <div>
       <div style={styles.sectionSub}>展示主关联项目和由当前线索转出或回连的项目；线索不是项目，项目由线索转化或关联而来。</div>
-      {projects.length ? <div style={styles.projectGrid}>{projects.map(project => this.renderProjectCard(project, isMobile))}</div> : this.renderEmpty('暂无关联项目，转项目或关联后会在这里显示')}
-      <div style={styles.projectHint}>提示：当线索成熟度达到“可转项目”时，可直接执行转项目。当前成熟度：{maturity && maturity !== '-' ? maturity : '未填写'}</div>
+      {projects.length ? <div style={styles.projectGrid}>{projects.map(project => this.renderProjectCard(project, isMobile))}</div> : this.renderEmpty('暂无关联项目，转为项目后会在这里显示')}
+      <div style={styles.projectHint}>提示：当线索成熟度达到“可转项目”时，可直接转为项目。当前成熟度：{maturity && maturity !== '-' ? maturity : '未填写'}</div>
     </div>);
 }
 export function renderProjectCard(row, isMobile) {
@@ -1025,34 +1078,7 @@ export function renderCloseModal() {
     </div>;
 }
 export function renderTransferModal() {
-  if (!_customState.transferModalOpen) return null;
-  var row = this.getLead();
-  var self = this;
-  return <div style={styles.modalMask}>
-      <div style={styles.modal}>
-        <div style={styles.modalHead}>
-          <div>
-            <div style={styles.modalTitle}>转项目 / 关联项目</div>
-            <div style={styles.modalSub}>{row ? this.getLeadTitle(row) : ''}</div>
-          </div>
-          <button type="button" onClick={e => {
-          self.closeTransferModal();
-        }} style={styles.iconButton}>×</button>
-        </div>
-        <div style={styles.tipBox}>本阶段使用轻量流程：项目通过“来源线索”字段回连市场线索。项目原生表单当前未验证可靠自动预填来源线索，请在原生表单中确认该字段。</div>
-        <div style={styles.modalActionsLeft}>
-          {this.renderButton('打开项目原生新增表单', 'primary', e => {
-          self.openProjectSubmissionFromLead();
-        })}
-          {this.renderButton('关联已有项目', 'default', e => {
-          self.openProjectManageForLink();
-        })}
-          {this.renderButton('取消', 'default', e => {
-          self.closeTransferModal();
-        })}
-        </div>
-      </div>
-    </div>;
+  return null;
 }
 export function renderEmpty(text) {
   return <div style={styles.empty}>{text}</div>;

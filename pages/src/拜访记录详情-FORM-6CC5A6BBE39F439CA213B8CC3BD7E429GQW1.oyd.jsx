@@ -6,6 +6,8 @@ var FORMS = {
   contactDetail: 'FORM-89CA116EA0134CACB77EAA0F87AA7AB8MD1C',
   unitDetail: 'FORM-4A90B63766D14A9798BD0B1DD1D32F9CMOZK',
   projectDetail: 'FORM-3367C1CD6BDB4FE995BCA69ECFF03419Q0A4',
+  intelManage: 'FORM-4E927F6C9D1E43EC8226DDB561F31FAC4OF7',
+  leadDetail: 'FORM-48EA952D879B4D1D94580C2EA14B7AE43HM9',
   visit: 'FORM-5C9373CB6EA5468FA607352B96908C87WHBW',
   contact: 'FORM-87B25B011DC14AA5ACC39BE4077D520AITQS',
   unit: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8',
@@ -28,6 +30,16 @@ var FIELDS = {
     place: 'textField_kyv390cmy',
     content: 'textareaField_kyv3acyym',
     nextAction: 'textareaField_0usd1fstw',
+    hasLead: 'radioField_mq4wodxx',
+    leadTable: 'tableField_mq4wodxm',
+    leadTableTitle: 'textField_mq4wodxo',
+    leadTableImportance: 'selectField_mq50f6hx',
+    leadTableCategory: 'selectField_mq4wodxp',
+    leadTableExpectedTime: 'textField_mq4wodxr',
+    leadTableValidUntil: 'dateField_mq4wodxs',
+    leadTableRemindDate: 'dateField_mq4wodxt',
+    leadTableContent: 'textareaField_mq4wodxy',
+    leadTableNextAction: 'textareaField_mq4wodxz',
     nextDate: 'dateField_kyv3f3sgc',
     auth: 'employeeField_kyv3jcji3',
     attachment: 'attachmentField_kyv3kmuep',
@@ -65,7 +77,6 @@ var _customState = {
   error: '',
   accessDenied: false,
   visitId: '',
-  activeTab: 'basic',
   visits: [],
   intel: [],
   intelDrawerOpen: false,
@@ -348,6 +359,37 @@ export function rowMatchesAssociation(row, fieldId, id) {
 export function getAttachmentItems(row) {
   return this.getAssociationItems(this.rawValue(row, FIELDS.visit.attachment));
 }
+export function getInlineVisitIntel(row) {
+  var items = this.getAssociationItems(this.rawValue(row, FIELDS.visit.leadTable));
+  var visitId = this.getRowId(row);
+  var list = [];
+  items.forEach((item, index) => {
+    if (!item || typeof item !== 'object') return;
+    var itemData = item.formData || item;
+    var title = this.formatValue(itemData[FIELDS.visit.leadTableTitle] || itemData.title || itemData.name);
+    var hasAny = title !== '-' || this.formatValue(itemData[FIELDS.visit.leadTableContent]) !== '-';
+    if (!hasAny) return;
+    var formData = {};
+    formData[FIELDS.intel.title] = title !== '-' ? title : '拜访记录内线索';
+    formData[FIELDS.intel.category] = itemData[FIELDS.visit.leadTableCategory] || '';
+    formData[FIELDS.intel.importance] = itemData[FIELDS.visit.leadTableImportance] || '';
+    formData[FIELDS.intel.expectedTime] = itemData[FIELDS.visit.leadTableExpectedTime] || '';
+    formData[FIELDS.intel.validUntil] = itemData[FIELDS.visit.leadTableValidUntil] || '';
+    formData[FIELDS.intel.remindDate] = itemData[FIELDS.visit.leadTableRemindDate] || '';
+    formData[FIELDS.intel.content] = itemData[FIELDS.visit.leadTableContent] || '';
+    formData[FIELDS.intel.nextAction] = itemData[FIELDS.visit.leadTableNextAction] || '';
+    formData[FIELDS.intel.status] = '待跟进';
+    formData[FIELDS.intel.owner] = this.rawValue(row, FIELDS.visit.recorder);
+    formData[FIELDS.intel.handlers] = this.rawValue(row, FIELDS.visit.handlers);
+    list.push({
+      formInstId: visitId ? visitId + '-inline-' + index : 'inline-' + index,
+      formData: formData,
+      __inlineVisitIntel: true,
+      __relationSource: '由本次拜访生成'
+    });
+  });
+  return list;
+}
 export function getRelatedIntel(row) {
   var visitId = this.getRowId(row);
   var leadIds = this.getAssociationIds(this.rawAssociation(row, FIELDS.visit.lead));
@@ -361,7 +403,7 @@ export function getRelatedIntel(row) {
     if (exists[id]) return;
     exists[id] = true;
     var copied = Object.assign({}, item);
-    copied.__relationSource = fromVisit ? '来源拜访记录' : '拜访记录关联线索';
+    copied.__relationSource = fromVisit ? '由本次拜访生成' : '由本次拜访关联';
     list.push(copied);
   });
   this.getAssociationItems(this.rawAssociation(row, FIELDS.visit.lead)).forEach(item => {
@@ -374,15 +416,149 @@ export function getRelatedIntel(row) {
     list.push({
       formInstId: id,
       formData: formData,
-      __relationSource: '拜访记录关联线索'
+      __relationSource: '由本次拜访关联'
     });
   });
+  if (!list.length) {
+    list = this.getInlineVisitIntel(row);
+  }
   list.sort((a, b) => {
     var ad = Number(this.rawValue(a, FIELDS.intel.remindDate)) || Number(this.rawValue(a, FIELDS.intel.validUntil)) || Number(this.rawValue(a, FIELDS.intel.recordTime)) || 0;
     var bd = Number(this.rawValue(b, FIELDS.intel.remindDate)) || Number(this.rawValue(b, FIELDS.intel.validUntil)) || Number(this.rawValue(b, FIELDS.intel.recordTime)) || 0;
     return bd - ad;
   });
   return list;
+}
+export function canOpenIntel(row) {
+  return !!row && !row.__inlineVisitIntel && !!this.getRowId(row);
+}
+export function getPrimaryIntelAction(row) {
+  var list = this.getRelatedIntel(row);
+  if (!list.length) {
+    return {
+      label: '生成线索',
+      action: 'create'
+    };
+  }
+  if (list.length === 1 && this.canOpenIntel(list[0])) {
+    return {
+      label: '查看线索',
+      action: 'view',
+      row: list[0]
+    };
+  }
+  if (list.length === 1) {
+    return {
+      label: '生成线索',
+      action: 'create'
+    };
+  }
+  return {
+    label: '新增线索',
+    action: 'create'
+  };
+}
+export function getLeadSummaryStatus(row) {
+  var list = this.getRelatedIntel(row);
+  if (!list.length) {
+    return {
+      label: '未生成线索',
+      tone: 'default'
+    };
+  }
+  var hasLinked = list.some(item => item && item.__relationSource === '由本次拜访关联');
+  if (hasLinked) {
+    return {
+      label: '已关联线索',
+      tone: 'success'
+    };
+  }
+  return {
+    label: '已生成线索',
+    tone: 'primary'
+  };
+}
+export function runPrimaryIntelAction(row) {
+  var action = this.getPrimaryIntelAction(row);
+  if (action.action === 'view' && action.row) {
+    this.openIntelDetail(action.row);
+    return;
+  }
+  this.openIntelNativeSubmission();
+}
+export function openAllIntel(row) {
+  var params = {};
+  var visitId = this.getRowId(row);
+  if (visitId) params.visitId = visitId;
+  if (visitId) params.sourceVisitId = visitId;
+  this.utils.router.push(FORMS.intelManage, params, false);
+}
+export function getRowCreatedTime(row) {
+  return row && (row.gmtCreate || row.createTime || row.createdAt || row.gmtCreated || row.formCreateTime) || this.rawValue(row, FIELDS.visit.recordTime);
+}
+export function getRowModifiedTime(row) {
+  return row && (row.gmtModified || row.modifiedTime || row.updateTime || row.updatedAt || row.formModifyTime) || '';
+}
+export function formatDateTime(value) {
+  if (!value || value === '-') return '-';
+  var num = Number(value);
+  if (!num) return '-';
+  var d = new Date(num);
+  var month = d.getMonth() + 1;
+  var day = d.getDate();
+  var hour = d.getHours();
+  var minute = d.getMinutes();
+  var monthText = month < 10 ? '0' + month : '' + month;
+  var dayText = day < 10 ? '0' + day : '' + day;
+  var hourText = hour < 10 ? '0' + hour : '' + hour;
+  var minuteText = minute < 10 ? '0' + minute : '' + minute;
+  return d.getFullYear() + '-' + monthText + '-' + dayText + ' ' + hourText + ':' + minuteText;
+}
+export function getDisplayName(item) {
+  var parsed = this.parseMaybeJson(item);
+  if (parsed === undefined || parsed === null || parsed === '') return '';
+  if (typeof parsed === 'string') return parsed;
+  if (typeof parsed !== 'object') return String(parsed);
+  return parsed.name || parsed.title || parsed.label || parsed.text || parsed.displayName || parsed.userName || parsed.nickName || '';
+}
+export function getPersonItems(value) {
+  var parsed = this.parseMaybeJson(value);
+  var list = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  return list.map(item => {
+    var name = this.getDisplayName(item);
+    return name ? { name: name } : null;
+  }).filter(item => item);
+}
+export function getInitial(name) {
+  if (!name) return '-';
+  return String(name).trim().charAt(0) || '-';
+}
+export function getAttachmentUrl(file) {
+  if (!file || typeof file !== 'object') return '';
+  return file.url || file.downloadUrl || file.previewUrl || file.fileUrl || file.ossUrl || '';
+}
+export function getAttachmentName(file, index) {
+  if (!file || typeof file !== 'object') return '附件 ' + (index + 1);
+  return file.name || file.fileName || file.title || file.filename || '附件 ' + (index + 1);
+}
+export function getAttachmentExt(name) {
+  var text = String(name || '');
+  var dot = text.lastIndexOf('.');
+  if (dot < 0) return '';
+  return text.slice(dot + 1).toUpperCase();
+}
+export function formatFileSize(file) {
+  if (!file || typeof file !== 'object') return '';
+  var size = Number(file.size || file.fileSize || file.length || 0);
+  if (!size) return '';
+  if (size < 1024) return size + ' B';
+  if (size < 1024 * 1024) return Math.round(size / 1024) + ' KB';
+  return Math.round(size / 1024 / 1024 * 10) / 10 + ' MB';
+}
+export function isImageAttachment(file, index) {
+  var name = this.getAttachmentName(file, index).toLowerCase();
+  var type = String(file && (file.type || file.mimeType || file.contentType) || '').toLowerCase();
+  return type.indexOf('image') >= 0 || /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(name);
 }
 export function getTodayStart() {
   var today = new Date();
@@ -408,39 +584,6 @@ export function getIntelTone(row) {
   if (status === '跟进中') return 'primary';
   if (status === '已关闭' || status === '已归档') return 'default';
   return 'warning';
-}
-export function getLoginUserId() {
-  if (this.utils.getLoginUserId) return this.utils.getLoginUserId();
-  return typeof window !== 'undefined' && window.loginUser && window.loginUser.userId || '';
-}
-export function normalizeAssociationPayload(value, formUuid, fallbackTitle) {
-  var result = [];
-  this.getAssociationItems(value).forEach(item => {
-    if (!item || typeof item !== 'object') return;
-    var id = item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
-    if (!id) return;
-    result.push({
-      formType: 'receipt',
-      formUuid: formUuid,
-      instanceId: id,
-      subTitle: item.subTitle || '',
-      appType: APP_TYPE,
-      title: item.title || item.name || item.label || item.text || fallbackTitle || ''
-    });
-  });
-  return result;
-}
-export function buildVisitAssociation(row) {
-  var id = this.getRowId(row);
-  if (!id) return [];
-  return [{
-    formType: 'receipt',
-    formUuid: FORMS.visit,
-    instanceId: id,
-    subTitle: this.formatDate(this.getVisitTime(row)),
-    appType: APP_TYPE,
-    title: this.getVisitTitle(row)
-  }];
 }
 export function resetIntelDraft() {
   _customState.intelDraft = {
@@ -491,103 +634,71 @@ export function parseDateInput(value) {
   if (!year || !month || !day) return 0;
   return new Date(year, month - 1, day).getTime();
 }
-export function addDays(time, days) {
-  return time + days * 24 * 60 * 60 * 1000;
-}
-export function normalizeTextValue(value, fallback) {
-  if (value === undefined || value === null || value === '' || value === '-') return fallback || '';
-  return value;
-}
-export function buildPrefilledIntelPayload(row) {
-  var payload = {};
-  var today = this.getTodayStart();
-  var nextDate = Number(this.rawValue(row, FIELDS.visit.nextDate)) || 0;
-  var visitContent = this.normalizeTextValue(this.getValue(row, FIELDS.visit.content), '由拜访记录生成，待补充线索内容');
-  var nextAction = this.normalizeTextValue(this.getValue(row, FIELDS.visit.nextAction), '');
-  var contact = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.contact), FORMS.contact, this.getAssociationText(row, FIELDS.visit.contact));
-  var unit = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.unit), FORMS.unit, this.getAssociationText(row, FIELDS.visit.unit));
-  var project = this.normalizeAssociationPayload(this.rawAssociation(row, FIELDS.visit.project), FORMS.project, this.getAssociationText(row, FIELDS.visit.project));
-  payload[FIELDS.intel.title] = this.getVisitTitle(row);
-  payload[FIELDS.intel.content] = visitContent;
-  payload[FIELDS.intel.category] = '项目线索';
-  payload[FIELDS.intel.importance] = '中';
-  payload[FIELDS.intel.status] = '待跟进';
-  payload[FIELDS.intel.sourceType] = '拜访获得';
-  payload[FIELDS.intel.entryType] = '拜访生成';
-  payload[FIELDS.intel.permission] = '内部';
-  payload[FIELDS.intel.nextAction] = nextAction;
-  payload[FIELDS.intel.remindDate] = nextDate || today;
-  payload[FIELDS.intel.validUntil] = nextDate && nextDate > today ? this.addDays(nextDate, 30) : this.addDays(today, 30);
-  payload[FIELDS.intel.recordTime] = new Date().getTime();
-  payload[FIELDS.intel.visit] = this.buildVisitAssociation(row);
-  if (contact.length) payload[FIELDS.intel.contact] = contact;
-  if (unit.length) payload[FIELDS.intel.unit] = unit;
-  if (project.length) payload[FIELDS.intel.project] = project;
-  return payload;
-}
-export function getSavedFormInstId(res) {
-  var body = res && (res.content || res.data || res.result || res) || {};
-  if (typeof body === 'string') return body;
-  return body.formInstId || body.formInstanceId || body.instanceId || body.id || body.formDataId || '';
-}
-export function findLatestIntelByVisit(row) {
-  var related = this.getRelatedIntel(row);
-  return related && related[0] || null;
-}
-export function openSavedIntelOrRefresh(row, formInstId) {
-  if (formInstId) {
-    this.openNativeEditForm(FORMS.intel, formInstId);
-    return;
+export function buildPrefilledIntelParams(row) {
+  var params = {};
+  params.sourceType = '拜访获得';
+  params.leadSourceType = '拜访获得';
+  params.entryType = '拜访生成';
+  params.leadEntryType = '拜访生成';
+  var visitId = this.getRowId(row);
+  if (visitId) {
+    params.visitId = visitId;
+    params.sourceVisitId = visitId;
   }
-  this.loadIntelData().then(() => {
-    var latest = this.findLatestIntelByVisit(row);
-    var id = this.getRowId(latest);
-    if (id) {
-      this.openNativeEditForm(FORMS.intel, id);
-      return;
-    }
-    this.utils.toast({
-      title: '市场线索已生成，请刷新后查看',
-      type: 'success'
-    });
-    this.forceUpdate();
-  }).catch(() => {
-    this.utils.toast({
-      title: '市场线索已生成，请刷新后查看',
-      type: 'success'
-    });
-  });
+  var visitNo = this.getValue(row, FIELDS.visit.serial);
+  if (visitNo && visitNo !== '-') params.visitNo = visitNo;
+  var title = this.getVisitTitle(row);
+  if (title && title !== '-') {
+    params.visitTitle = title;
+    params.leadTitle = title;
+  }
+  var content = this.getValue(row, FIELDS.visit.content);
+  if (content && content !== '-') {
+    params.visitContent = content;
+    params.leadContent = content;
+  }
+  var nextAction = this.getValue(row, FIELDS.visit.nextAction);
+  if (nextAction && nextAction !== '-') {
+    params.nextAction = nextAction;
+    params.leadNextAction = nextAction;
+  }
+  var nextDate = this.rawValue(row, FIELDS.visit.nextDate);
+  if (nextDate) params.leadRemindDate = nextDate;
+  var visitTime = this.rawValue(row, FIELDS.visit.time);
+  if (visitTime) params.visitTime = visitTime;
+  var method = this.getValue(row, FIELDS.visit.method);
+  if (method && method !== '-') params.visitMethod = method;
+  var recorder = this.getValue(row, FIELDS.visit.recorder);
+  if (recorder && recorder !== '-') params.recorder = recorder;
+  var handlers = this.getValue(row, FIELDS.visit.handlers);
+  if (handlers && handlers !== '-') params.leadHandlers = handlers;
+  var watchers = this.getValue(row, FIELDS.visit.watchers);
+  if (watchers && watchers !== '-') params.leadWatchers = watchers;
+  var contactId = this.getAssociationId(this.rawAssociation(row, FIELDS.visit.contact));
+  if (contactId) {
+    params.contactId = contactId;
+    params.contactTitle = this.getAssociationText(row, FIELDS.visit.contact);
+  }
+  var unitId = this.getAssociationId(this.rawAssociation(row, FIELDS.visit.unit));
+  if (unitId) {
+    params.unitId = unitId;
+    params.unitTitle = this.getAssociationText(row, FIELDS.visit.unit);
+  }
+  var projectId = this.getAssociationId(this.rawAssociation(row, FIELDS.visit.project));
+  if (projectId) {
+    params.projectId = projectId;
+    params.projectTitle = this.getAssociationText(row, FIELDS.visit.project);
+  }
+  return params;
 }
 export function openIntelNativeSubmission() {
   var row = this.getVisit();
   if (!row) return;
-  if (_customState.intelSaving) return;
-  _customState.intelSaving = true;
-  this.forceUpdate();
-  var payload = this.buildPrefilledIntelPayload(row);
   this.utils.toast({
-    title: '正在生成预填市场线索',
+    title: '将打开市场线索原生新增页',
     type: 'notice'
   });
-  this.utils.yida.saveFormData({
-    appType: APP_TYPE,
-    formUuid: FORMS.intel,
-    formDataJson: JSON.stringify(payload)
-  }).then(res => {
-    _customState.intelSaving = false;
-    this.utils.toast({
-      title: '已生成预填草稿，请在原生表单中补充人员字段',
-      type: 'success'
-    });
-    this.openSavedIntelOrRefresh(row, this.getSavedFormInstId(res));
-  }).catch(err => {
-    _customState.intelSaving = false;
-    this.forceUpdate();
-    this.utils.toast({
-      title: '生成市场线索失败：' + this.getErrorMessage(err),
-      type: 'error'
-    });
-  });
+  this.openSubmissionForm(FORMS.intel, this.buildPrefilledIntelParams(row));
 }
 export function methodTone(method) {
   if (method === '电话' || method === '微信') return 'success';
@@ -597,6 +708,15 @@ export function methodTone(method) {
 }
 export function goBack() {
   this.utils.router.push(FORMS.visitManage, {}, false);
+}
+export function openSubmissionForm(formUuid, params) {
+  var base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+  var query = [];
+  var data = params || {};
+  Object.keys(data).forEach(key => {
+    if (data[key] !== undefined && data[key] !== null && data[key] !== '') query.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+  });
+  window.location.href = base + '/' + APP_TYPE + '/submission/' + formUuid + (query.length ? '?' + query.join('&') : '');
 }
 export function openNativeEditForm(formUuid, formInstId) {
   if (!formInstId) return;
@@ -617,7 +737,9 @@ export function editVisit() {
 export function openIntelDetail(row) {
   var id = this.getRowId(row);
   if (!id) return;
-  this.openNativeDetailForm(FORMS.intel, id);
+  this.utils.router.push(FORMS.leadDetail, {
+    leadId: id
+  }, false);
 }
 export function editIntel(row) {
   var id = this.getRowId(row);
@@ -713,168 +835,6 @@ export function renderBack(isMobile) {
       </button>
     </div>;
 }
-export function renderHero(row, isMobile) {
-  var method = this.getValue(row, FIELDS.visit.method);
-  var people = this.getValue(row, FIELDS.visit.people);
-  var recorder = this.getValue(row, FIELDS.visit.recorder);
-  var participant = people !== '-' ? people : recorder;
-  return <div style={isMobile ? styles.heroMobile : styles.hero}>
-      <div style={isMobile ? styles.heroTopMobile : styles.heroTop}>
-        <div style={styles.titleWrap}>
-          <div style={styles.titleLine}>
-            {this.renderBadge(method, this.methodTone(method))}
-            <h1 style={styles.title}>{this.getVisitTitle(row)}</h1>
-          </div>
-          <div style={styles.metaLine}>
-            <span>{this.formatDate(this.getVisitTime(row))}</span>
-            <span>{this.getValue(row, FIELDS.visit.place)}</span>
-            <span>我方：{participant}</span>
-          </div>
-        </div>
-        <div style={styles.heroRight}>
-          <div style={styles.serial}>{this.getValue(row, FIELDS.visit.serial)} · 记录人：{recorder}</div>
-          <div style={styles.actions}>
-            {this.renderButton(<span style={styles.buttonInner}>{this.renderMiniIcon('edit', '#344054', 14)}<span>编辑</span></span>, 'edit', e => {
-            this.editVisit();
-          })}
-          </div>
-        </div>
-      </div>
-      <div style={isMobile ? styles.summaryGridMobile : styles.summaryGrid}>
-        {this.renderRelationCard('主联系人', this.getAssociationText(row, FIELDS.visit.contact), 'primary', e => {
-        this.openContact(row);
-      })}
-        {this.renderRelationCard('关联单位', this.getAssociationText(row, FIELDS.visit.unit), 'default', e => {
-        this.openRelationDetail(row, FIELDS.visit.unit, FORMS.unitDetail, 'unitId');
-      })}
-        {this.renderRelationCard('关联项目', this.getAssociationText(row, FIELDS.visit.project), 'purple', e => {
-        this.openRelationDetail(row, FIELDS.visit.project, FORMS.projectDetail, 'projectId');
-      })}
-        {this.renderRelationCard('计划跟进', this.formatDate(this.rawValue(row, FIELDS.visit.nextDate)), 'success', null)}
-      </div>
-    </div>;
-}
-export function renderRelationCard(label, value, tone, onClick) {
-  var color = tone === 'primary' ? styles.summaryBlue : tone === 'purple' ? styles.summaryPurple : tone === 'success' ? styles.summaryGreen : {};
-  var clickable = value !== '-' && onClick;
-  return <div onClick={e => {
-    if (clickable) onClick(e);
-  }} style={Object.assign({}, styles.summaryCard, color, clickable ? styles.clickable : {})}>
-      <div style={styles.summaryLabel}>{label}</div>
-      <div style={styles.summaryValue}>{value !== '-' ? value + (clickable ? ' ›' : '') : '-'}</div>
-    </div>;
-}
-export function renderSection(title, children, secure) {
-  return <div style={styles.section}>
-      <div style={styles.sectionHead}>
-        <h3 style={styles.sectionTitle}>{title}</h3>
-        {secure && <span style={styles.secureBadge}>授权可见</span>}
-      </div>
-      {children}
-    </div>;
-}
-export function renderTextBlock(text, tone) {
-  var style = tone === 'blue' ? styles.textBlockBlue : tone === 'amber' ? styles.textBlockAmber : styles.textBlock;
-  return <div style={style}>{text && text !== '-' ? text : '暂无记录'}</div>;
-}
-export function renderAttachments(row) {
-  var files = this.getAttachmentItems(row);
-  if (!files.length) return null;
-  return this.renderSection('附件', <div style={styles.attachmentList}>
-      {files.map((file, index) => <div key={index} style={styles.attachmentItem}>
-          {file.name || file.fileName || file.title || '附件 ' + (index + 1)}
-        </div>)}
-    </div>, false);
-}
-export function renderDetailBody(row) {
-  var nextDate = this.formatDate(this.rawValue(row, FIELDS.visit.nextDate));
-  var auth = this.getValue(row, FIELDS.visit.auth);
-  return <div style={styles.panel}>
-      {this.renderSection('交流内容', this.renderTextBlock(this.getValue(row, FIELDS.visit.content), 'default'), false)}
-      {this.renderSection('后续动作', <div style={styles.nextBox}>
-          <div style={styles.nextText}>{this.getValue(row, FIELDS.visit.nextAction) !== '-' ? this.getValue(row, FIELDS.visit.nextAction) : '暂无后续动作'}</div>
-          {nextDate !== '-' && <div style={styles.nextDate}>计划跟进日期：{nextDate}</div>}
-        </div>, false)}
-      {auth !== '-' && this.renderSection('授权查看人', this.renderTextBlock(auth, 'default'), true)}
-    </div>;
-}
-export function setActiveTab(key) {
-  _customState.activeTab = key;
-  this.forceUpdate();
-}
-export function renderTabs() {
-  var tabs = [{
-    key: 'basic',
-    label: '基本信息'
-  }, {
-    key: 'attachment',
-    label: '附件资料'
-  }, {
-    key: 'intel',
-    label: '市场线索'
-  }];
-  return <div style={styles.tabs}>
-      {tabs.map(tab => <button key={tab.key} style={Object.assign({}, styles.tab, _customState.activeTab === tab.key ? styles.tabActive : {})} onClick={e => {
-      this.setActiveTab(tab.key);
-    }}>{tab.label}</button>)}
-    </div>;
-}
-export function renderAttachmentTab(row) {
-  var body = this.renderAttachments(row);
-  return <div style={styles.panel}>
-      {body || this.renderEmpty('暂无附件资料')}
-    </div>;
-}
-export function renderIntelCard(row) {
-  var status = this.getValue(row, FIELDS.intel.status);
-  var importance = this.getValue(row, FIELDS.intel.importance);
-  var validUntil = this.formatDate(this.rawValue(row, FIELDS.intel.validUntil));
-  var remindDate = this.formatDate(this.rawValue(row, FIELDS.intel.remindDate));
-  var project = this.getAssociationText(row, FIELDS.intel.project);
-  var projectText = project;
-  var handlers = this.getValue(row, FIELDS.intel.handlers);
-  var watchers = this.getValue(row, FIELDS.intel.watchers);
-  var content = this.getValue(row, FIELDS.intel.content);
-  var visit = this.getVisit();
-  var sourceContent = visit ? this.getValue(visit, FIELDS.visit.content) : '-';
-  var contentText = content !== '-' ? content : sourceContent !== '-' ? '来源交流摘要：' + sourceContent : '暂无线索内容';
-  var expired = this.isIntelOverdue(row);
-  var remindDue = this.isIntelReminderDue(row);
-  return <div key={this.getRowId(row)} style={styles.intelCard}>
-      <div style={styles.intelCardHead}>
-        <div style={styles.intelCardTitle} onClick={e => {
-        this.openIntelDetail(row);
-      }}>{this.getValue(row, FIELDS.intel.title)}</div>
-        <div style={styles.intelBadges}>
-          {row.__relationSource && this.renderBadge(row.__relationSource, 'default')}
-          {expired && this.renderBadge('已过期', 'danger')}
-          {!expired && remindDue && this.renderBadge('待提醒', 'warning')}
-          {this.renderBadge(status, this.getIntelTone(row))}
-          {importance !== '-' && this.renderBadge(importance, importance === '高' ? 'danger' : importance === '低' ? 'default' : 'warning')}
-        </div>
-      </div>
-      <div style={styles.intelMetaGrid}>
-        <div style={styles.intelMetaItem}><span>线索类型</span><strong>{this.getValue(row, FIELDS.intel.category)}</strong></div>
-        <div style={styles.intelMetaItem}><span>主关联项目</span><strong>{projectText !== '-' ? projectText : '未关联'}</strong></div>
-        <div style={styles.intelMetaItem}><span>预计时间</span><strong>{this.getValue(row, FIELDS.intel.expectedTime)}</strong></div>
-        <div style={styles.intelMetaItem}><span>有效截止</span><strong>{validUntil}</strong></div>
-        <div style={styles.intelMetaItem}><span>提醒</span><strong>{remindDate}</strong></div>
-        <div style={styles.intelMetaItem}><span>线索负责人</span><strong>{this.getValue(row, FIELDS.intel.owner)}</strong></div>
-        <div style={styles.intelMetaItem}><span>跟进经办人</span><strong>{handlers !== '-' ? handlers : '未指定'}</strong></div>
-        <div style={styles.intelMetaItem}><span>关注人 / 必看人</span><strong>{watchers !== '-' ? watchers : '未指定'}</strong></div>
-      </div>
-      <div style={styles.intelContent}>{contentText}</div>
-      {this.getValue(row, FIELDS.intel.nextAction) !== '-' && <div style={styles.intelNext}>下一步：{this.getValue(row, FIELDS.intel.nextAction)}</div>}
-      <div style={styles.intelActions}>
-        {this.renderButton('查看', 'default', e => {
-        this.openIntelDetail(row);
-      })}
-        {this.renderButton('编辑', 'edit', e => {
-        this.editIntel(row);
-      })}
-      </div>
-    </div>;
-}
 export function renderIntelCategoryChoice(label) {
   var active = _customState.intelDraft.category === label;
   return <button style={Object.assign({}, styles.categoryChoice, active ? styles.categoryChoiceActive : {})} onClick={e => {
@@ -887,34 +847,383 @@ export function renderIntelImportanceChoice(label) {
       this.setIntelImportance(label);
     }}>{label}</button>;
 }
-export function renderIntelDrawer(row) {
-  return null;
-}
-export function renderIntelTab(row) {
-  var intel = this.getRelatedIntel(row);
-  return <div style={styles.panel}>
-      <div style={styles.intelHead}>
-        <div>
-          <h3 style={styles.sectionTitle}>市场线索（{intel.length}条）</h3>
-          <div style={styles.intelHeadSub}>展示本次拜访生成的市场线索，以及拜访记录已关联的市场线索</div>
-        </div>
-        {this.renderButton(_customState.intelSaving ? '生成中...' : '+ 生成市场线索', 'primary', e => {
-          this.openIntelDrawer();
-        })}
-      </div>
-      <div style={styles.intelList}>
-        {intel.length ? intel.map(item => this.renderIntelCard(item)) : this.renderEmpty('暂无市场线索')}
-      </div>
-      {this.renderIntelDrawer(row)}
-    </div>;
-}
-export function renderTabContent(row) {
-  if (_customState.activeTab === 'attachment') return this.renderAttachmentTab(row);
-  if (_customState.activeTab === 'intel') return this.renderIntelTab(row);
-  return this.renderDetailBody(row);
-}
 export function renderEmpty(text) {
   return <div style={styles.empty}>{text}</div>;
+}
+export function renderDetailMiniIcon(name, color, size) {
+  var common = {
+    width: size || 18,
+    height: size || 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: color || '#475467',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    style: {
+      flexShrink: 0
+    }
+  };
+  if (name === 'arrowLeft') return <svg {...common}><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>;
+  if (name === 'edit') return <svg {...common}><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"></path></svg>;
+  if (name === 'target') return <svg {...common}><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path></svg>;
+  if (name === 'plus') return <svg {...common}><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>;
+  if (name === 'user') return <svg {...common}><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+  if (name === 'building') return <svg {...common}><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-6h6v6"></path><path d="M9 9h.01"></path><path d="M15 9h.01"></path><path d="M9 12h.01"></path><path d="M15 12h.01"></path></svg>;
+  if (name === 'folder') return <svg {...common}><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg>;
+  if (name === 'calendar') return <svg {...common}><path d="M8 2v4"></path><path d="M16 2v4"></path><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M3 10h18"></path></svg>;
+  if (name === 'location') return <svg {...common}><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>;
+  if (name === 'users') return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
+  if (name === 'message') return <svg {...common}><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path><path d="M8 9h8"></path><path d="M8 13h5"></path></svg>;
+  if (name === 'flag') return <svg {...common}><path d="M4 22V4"></path><path d="M4 4h12l-1 5 1 5H4"></path></svg>;
+  if (name === 'clipboard') return <svg {...common}><rect x="4" y="4" width="16" height="18" rx="2"></rect><path d="M9 2h6v4H9z"></path><path d="M9 12h6"></path><path d="M9 16h4"></path></svg>;
+  if (name === 'paperclip') return <svg {...common}><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>;
+  if (name === 'download') return <svg {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>;
+  if (name === 'chevronRight') return <svg {...common}><path d="m9 18 6-6-6-6"></path></svg>;
+  if (name === 'check') return <svg {...common}><path d="M20 6 9 17l-5-5"></path></svg>;
+  return null;
+}
+export function renderDetailBadge(text, toneName) {
+  var tone = toneName || 'default';
+  var map = {
+    primary: { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' },
+    success: { bg: '#DCFCE7', color: '#16A34A', border: '#BBF7D0' },
+    warning: { bg: '#FFF7ED', color: '#F59E0B', border: '#FED7AA' },
+    danger: { bg: '#FEF2F2', color: '#EF4444', border: '#FECACA' },
+    teal: { bg: '#ECFEFF', color: '#0891B2', border: '#A5F3FC' },
+    purple: { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' },
+    default: { bg: '#F1F5F9', color: '#64748B', border: '#E2E8F0' }
+  };
+  var c = map[tone] || map.default;
+  return <span style={Object.assign({}, detailStyles.badge, {
+    background: c.bg,
+    color: c.color,
+    border: '1px solid ' + c.border
+  })}>{text || '暂无'}</span>;
+}
+export function renderDetailButton(label, type, iconName, onClick) {
+  var primary = type === 'primary';
+  var color = primary ? '#FFFFFF' : '#334155';
+  return <button type="button" onClick={e => {
+    if (onClick) onClick(e);
+  }} style={Object.assign({}, detailStyles.button, primary ? detailStyles.buttonPrimary : detailStyles.buttonDefault)}>
+      <span style={detailStyles.buttonInner}>
+        {iconName && this.renderDetailMiniIcon(iconName, color, 16)}
+        <span>{label}</span>
+      </span>
+    </button>;
+}
+export function getImportanceTone(value) {
+  if (value === '高') return 'danger';
+  if (value === '中') return 'warning';
+  if (value === '低') return 'default';
+  return 'default';
+}
+export function getStatusTone(value) {
+  if (value === '跟进中') return 'success';
+  if (value === '待跟进') return 'warning';
+  if (value === '已转项目') return 'teal';
+  if (value === '已关闭' || value === '已归档') return 'default';
+  return this.getIntelTone({ formData: {} });
+}
+export function getSummaryEmptyText(label) {
+  if (label === '关联单位') return '暂未关联单位';
+  if (label === '关联项目') return '暂未关联项目';
+  if (label === '主联系人') return '暂未关联联系人';
+  return '暂无';
+}
+export function renderMemoText(text, emptyText) {
+  if (!text || text === '-') return <div style={detailStyles.emptyInline}>{emptyText || '暂无'}</div>;
+  var lines = String(text).split('\n').map(item => item.trim()).filter(item => item);
+  if (!lines.length) return <div style={detailStyles.emptyInline}>{emptyText || '暂无'}</div>;
+  return <div style={detailStyles.memoList}>
+      {lines.map((line, index) => <div key={'memo-' + index} style={detailStyles.memoLine}>{line}</div>)}
+    </div>;
+}
+export function renderHeroDetail(row, isMobile) {
+  var method = this.getValue(row, FIELDS.visit.method);
+  var people = this.getValue(row, FIELDS.visit.people);
+  var recorder = this.getValue(row, FIELDS.visit.recorder);
+  var participant = people !== '-' ? people : recorder;
+  var primaryAction = this.getPrimaryIntelAction(row);
+  return <div style={detailStyles.hero}>
+      <div style={detailStyles.backLine}>
+        <button type="button" style={detailStyles.backLink} onClick={e => {
+          this.goBack();
+        }}>
+          {this.renderDetailMiniIcon('arrowLeft', '#344054', 17)}
+          <span>返回拜访记录</span>
+        </button>
+      </div>
+      <div style={isMobile ? detailStyles.heroMainMobile : detailStyles.heroMain}>
+        <div style={detailStyles.heroInfo}>
+          <div style={detailStyles.titleLine}>
+            {this.renderDetailBadge(method !== '-' ? method : '暂无方式', this.methodTone(method))}
+            <h1 style={detailStyles.title}>{this.getVisitTitle(row)}</h1>
+          </div>
+          <div style={detailStyles.metaLine}>
+            <span style={detailStyles.metaItem}>{this.renderDetailMiniIcon('calendar', '#64748B', 16)}{this.formatDate(this.getVisitTime(row))}</span>
+            <span style={detailStyles.metaItem}>{this.renderDetailMiniIcon('location', '#64748B', 16)}{this.getValue(row, FIELDS.visit.place)}</span>
+            <span style={detailStyles.metaItem}>{this.renderDetailMiniIcon('users', '#64748B', 16)}我方：{participant}</span>
+          </div>
+        </div>
+        <div style={detailStyles.actions}>
+          {this.renderDetailButton(primaryAction.label, 'primary', primaryAction.action === 'view' ? 'target' : 'plus', e => {
+            this.runPrimaryIntelAction(row);
+          })}
+          {this.renderDetailButton('编辑记录', 'default', 'edit', e => {
+            this.editVisit();
+          })}
+        </div>
+      </div>
+      <div style={isMobile ? detailStyles.summaryGridMobile : detailStyles.summaryGrid}>
+        {this.renderSummaryCard('主联系人', this.getAssociationText(row, FIELDS.visit.contact), 'user', 'blue', e => {
+          this.openContact(row);
+        })}
+        {this.renderSummaryCard('关联单位', this.getAssociationText(row, FIELDS.visit.unit), 'building', 'green', e => {
+          this.openRelationDetail(row, FIELDS.visit.unit, FORMS.unitDetail, 'unitId');
+        })}
+        {this.renderSummaryCard('关联项目', this.getAssociationText(row, FIELDS.visit.project), 'folder', 'purple', e => {
+          this.openRelationDetail(row, FIELDS.visit.project, FORMS.projectDetail, 'projectId');
+        })}
+      </div>
+    </div>;
+}
+export function renderSummaryCard(label, value, iconName, tone, onClick) {
+  var filled = value && value !== '-';
+  var clickable = filled && !!onClick;
+  var emptyText = this.getSummaryEmptyText(label);
+  var toneStyle = tone === 'blue' ? detailStyles.summaryBlue : tone === 'green' ? detailStyles.summaryGreen : detailStyles.summaryPurple;
+  var iconStyle = tone === 'blue' ? detailStyles.summaryIconBlue : tone === 'green' ? detailStyles.summaryIconGreen : detailStyles.summaryIconPurple;
+  return <div style={Object.assign({}, detailStyles.summaryCard, toneStyle, clickable ? detailStyles.clickable : {})} onClick={e => {
+      if (clickable) onClick(e);
+    }}>
+      <div style={iconStyle}>{this.renderDetailMiniIcon(iconName, iconStyle.color, 24)}</div>
+      <div style={detailStyles.summaryText}>
+        <div style={detailStyles.summaryLabel}>{label}</div>
+        <div style={filled ? detailStyles.summaryValue : detailStyles.summaryEmpty}>{filled ? value : emptyText}</div>
+      </div>
+      {clickable && <div style={detailStyles.summaryArrow}>{this.renderDetailMiniIcon('chevronRight', '#94A3B8', 18)}</div>}
+    </div>;
+}
+export function renderDetailSection(title, iconName, children) {
+  return <section style={detailStyles.card}>
+      <div style={detailStyles.cardTitle}>
+        {this.renderDetailMiniIcon(iconName, '#2563EB', 21)}
+        <span>{title}</span>
+      </div>
+      {children}
+    </section>;
+}
+export function renderContentSection(row) {
+  return this.renderDetailSection('交流内容', 'message', this.renderMemoText(this.getValue(row, FIELDS.visit.content), '暂无交流内容'));
+}
+export function renderNextActionSection(row) {
+  var nextAction = this.getValue(row, FIELDS.visit.nextAction);
+  var nextDate = this.formatDate(this.rawValue(row, FIELDS.visit.nextDate));
+  var handler = this.getValue(row, FIELDS.visit.handlers);
+  return this.renderDetailSection('后续动作', 'flag', <div>
+      <div style={detailStyles.nextBox}>
+        <span style={detailStyles.nextIcon}>{this.renderDetailMiniIcon('check', '#2563EB', 15)}</span>
+        <span style={detailStyles.nextText}>{nextAction !== '-' ? nextAction : '暂无后续动作'}</span>
+      </div>
+      <div style={detailStyles.followMeta}>
+        {nextDate !== '-' && <div style={detailStyles.followMetaItem}>{this.renderDetailMiniIcon('calendar', '#64748B', 15)}<span>下次跟进日期</span><strong>{nextDate}</strong></div>}
+        {handler !== '-' && <div style={detailStyles.followMetaItem}>{this.renderDetailMiniIcon('user', '#64748B', 15)}<span>跟进经办人</span><strong>{handler}</strong></div>}
+      </div>
+    </div>);
+}
+export function renderScheduleSection(row) {
+  var leadStatus = this.getLeadSummaryStatus(row);
+  var serial = this.getValue(row, FIELDS.visit.serial);
+  var created = this.formatDateTime(this.getRowCreatedTime(row));
+  var modified = this.formatDateTime(this.getRowModifiedTime(row));
+  return this.renderDetailSection('状态摘要', 'clipboard', <div>
+      <div style={detailStyles.kvList}>
+        <div style={detailStyles.kvRow}>
+          <span style={detailStyles.kvLabel}>当前状态</span>
+          <span style={detailStyles.kvValue}>{this.renderDetailBadge('已记录', 'primary')}</span>
+        </div>
+        <div style={detailStyles.kvRow}>
+          <span style={detailStyles.kvLabel}>线索状态</span>
+          <span style={detailStyles.kvValue}>{this.renderDetailBadge(leadStatus.label, leadStatus.tone)}</span>
+        </div>
+      </div>
+      <div style={detailStyles.recordInfoGroup}>
+        <div style={detailStyles.recordInfoTitle}>记录信息</div>
+        <div style={detailStyles.recordInfoList}>
+          <div style={detailStyles.recordInfoRow}>
+            <span style={detailStyles.recordInfoLabel}>记录编号</span>
+            <span style={detailStyles.recordNoValue}>{serial !== '-' ? serial : '暂无'}</span>
+          </div>
+          <div style={detailStyles.recordInfoRow}>
+            <span style={detailStyles.recordInfoLabel}>创建时间</span>
+            <span style={detailStyles.recordInfoValue}>{created}</span>
+          </div>
+          <div style={detailStyles.recordInfoRow}>
+            <span style={detailStyles.recordInfoLabel}>最后修改</span>
+            <span style={detailStyles.recordInfoValue}>{modified}</span>
+          </div>
+        </div>
+      </div>
+    </div>);
+}
+export function renderPeopleGroup(title, people, toneOffset, emptyText) {
+  return <div style={detailStyles.peopleGroup}>
+      <div style={detailStyles.peopleTitle}>{title}</div>
+      {people.length ? <div style={detailStyles.peopleList}>
+          {people.map((person, index) => {
+          var toneIndex = (index + (toneOffset || 0)) % 4;
+          var avatarStyle = toneIndex === 0 ? detailStyles.avatarBlue : toneIndex === 1 ? detailStyles.avatarGreen : toneIndex === 2 ? detailStyles.avatarPurple : detailStyles.avatarSlate;
+          return <div key={person.name + index} style={detailStyles.personItem}>
+              <span style={Object.assign({}, detailStyles.avatar, avatarStyle)}>{this.getInitial(person.name)}</span>
+              <span>{person.name}</span>
+            </div>;
+        })}
+        </div> : <div style={detailStyles.emptyInline}>{emptyText || '暂无'}</div>}
+    </div>;
+}
+export function renderPermissionSection(row) {
+  var watchers = this.getPersonItems(this.rawValue(row, FIELDS.visit.watchers));
+  var auth = this.getPersonItems(this.rawValue(row, FIELDS.visit.auth));
+  return this.renderDetailSection('协作与权限', 'users', <div>
+      {this.renderPeopleGroup('关注人 / 必看人', watchers, 0, '暂无关注人')}
+      <div style={detailStyles.peopleDivider}></div>
+      {this.renderPeopleGroup('授权查看人', auth, 1, '暂无授权查看人')}
+    </div>);
+}
+export function renderIntelMeta(label, value, tone) {
+  return <div style={detailStyles.intelMeta}>
+      <span>{label}</span>
+      <strong style={detailStyles.intelMetaValue}>{tone ? this.renderDetailBadge(value !== '-' ? value : '暂无', tone) : value !== '-' ? value : '暂无'}</strong>
+    </div>;
+}
+export function renderIntelCardDetail(item, compact, index) {
+  var status = this.getValue(item, FIELDS.intel.status);
+  var importance = this.getValue(item, FIELDS.intel.importance);
+  var title = this.getValue(item, FIELDS.intel.title);
+  var sourceText = item.__relationSource || '';
+  var isLinked = sourceText === '由本次拜访关联';
+  return <div key={this.getRowId(item)} style={detailStyles.intelCard}>
+      <div style={detailStyles.intelCardTop}>
+        {compact && <span style={detailStyles.intelIndex}>{(index || 0) + 1}</span>}
+        <div style={detailStyles.intelTitleWrap}>
+          <div style={detailStyles.intelTitle}>{title !== '-' ? title : '未命名线索'}</div>
+          <div style={detailStyles.intelBadges}>
+            {sourceText && this.renderDetailBadge(sourceText, isLinked ? 'warning' : 'default')}
+            {status !== '-' && this.renderDetailBadge(status, this.getStatusTone(status))}
+          </div>
+        </div>
+        {this.canOpenIntel(item) ? this.renderDetailButton('查看线索详情', 'default', 'chevronRight', e => {
+          this.openIntelDetail(item);
+        }) : this.renderDetailButton('生成正式线索', 'default', 'plus', e => {
+          this.openIntelNativeSubmission();
+        })}
+      </div>
+      <div style={compact ? detailStyles.intelMetaGridCompact : detailStyles.intelMetaGridDetail}>
+        {this.renderIntelMeta('线索类型', this.getValue(item, FIELDS.intel.category))}
+        {this.renderIntelMeta('重要程度', importance, this.getImportanceTone(importance))}
+        {this.renderIntelMeta('提醒日期', this.formatDate(this.rawValue(item, FIELDS.intel.remindDate)))}
+        {this.renderIntelMeta('线索负责人', this.getValue(item, FIELDS.intel.owner))}
+        {this.renderIntelMeta('跟进经办人', this.getValue(item, FIELDS.intel.handlers))}
+        {!compact && this.renderIntelMeta('线索状态', status, this.getStatusTone(status))}
+      </div>
+      {isLinked && <div style={detailStyles.intelHint}>本次拜访已归入该线索推进过程，可在线索详情中查看完整时间线。</div>}
+      {sourceText && !isLinked && compact && <div style={detailStyles.intelHint}>{sourceText}</div>}
+    </div>;
+}
+export function getIntelStatusCounts(list) {
+  var counts = {};
+  list.forEach(item => {
+    var status = this.getValue(item, FIELDS.intel.status);
+    if (!status || status === '-') status = '待跟进';
+    counts[status] = (counts[status] || 0) + 1;
+  });
+  return counts;
+}
+export function renderIntelSectionDetail(row) {
+  var list = this.getRelatedIntel(row);
+  if (!list.length) return null;
+  var count = list.length;
+  var first = list[0];
+  var singleLinked = count === 1 && first.__relationSource === '由本次拜访关联';
+  var title = count === 1 ? singleLinked ? '已关联线索' : '市场线索信息' : '关联市场线索（' + count + '）';
+  var showAll = count >= 4;
+  var visible = showAll ? list.slice(0, 3) : list;
+  var folded = count - visible.length;
+  var counts = this.getIntelStatusCounts(list);
+  return this.renderDetailSection(title, 'target', <div>
+      {count > 1 && <div style={detailStyles.sectionSub}>本次拜访同时支撑多个市场机会，按线索卡片分别查看和推进。</div>}
+      {showAll && <div style={detailStyles.statusPills}>
+          {counts['跟进中'] ? this.renderDetailBadge('跟进中 ' + counts['跟进中'], 'success') : null}
+          {counts['待跟进'] ? this.renderDetailBadge('待跟进 ' + counts['待跟进'], 'warning') : null}
+          {counts['已转项目'] ? this.renderDetailBadge('已转项目 ' + counts['已转项目'], 'teal') : null}
+          {counts['已关闭'] ? this.renderDetailBadge('已关闭 ' + counts['已关闭'], 'default') : null}
+        </div>}
+      {showAll && <div style={detailStyles.sectionToolbar}>
+          {this.renderDetailButton('查看全部线索', 'default', 'chevronRight', e => {
+            this.openAllIntel(row);
+          })}
+        </div>}
+      <div style={detailStyles.intelListDetail}>{visible.map((item, index) => this.renderIntelCardDetail(item, count > 1, index))}</div>
+      {showAll && folded > 0 && <div style={detailStyles.foldedRow} onClick={e => {
+        this.openAllIntel(row);
+      }}>
+          <span>{list[3] ? this.getValue(list[3], FIELDS.intel.title) : '更多线索'}</span>
+          <span>另有 {folded} 条线索已折叠显示，可点击“查看全部线索”统一查看。</span>
+          {this.renderDetailMiniIcon('chevronRight', '#667085', 18)}
+        </div>}
+    </div>);
+}
+export function renderAttachmentCard(file, index, titleOverride, countOverride) {
+  var name = titleOverride || this.getAttachmentName(file, index);
+  var url = this.getAttachmentUrl(file);
+  var ext = countOverride ? '图片' : this.getAttachmentExt(name) || '附件';
+  var size = countOverride ? countOverride + ' 张图片' : this.formatFileSize(file);
+  var body = <div style={detailStyles.fileCard}>
+      <div style={detailStyles.fileIcon}>{this.renderDetailMiniIcon(countOverride ? 'folder' : 'paperclip', '#2563EB', 22)}</div>
+      <div style={detailStyles.fileInfo}>
+        <div style={detailStyles.fileName}>{name}</div>
+        <div style={detailStyles.fileMeta}>{ext}{size ? ' · ' + size : ''}</div>
+      </div>
+      {url && this.renderDetailMiniIcon('download', '#667085', 18)}
+    </div>;
+  if (!url) return body;
+  return <a key={name + index} href={url} target="_blank" rel="noreferrer" style={detailStyles.fileLink}>{body}</a>;
+}
+export function renderAttachmentsDetail(row) {
+  var files = this.getAttachmentItems(row);
+  if (!files.length) {
+    return this.renderDetailSection('附件资料', 'paperclip', <div style={detailStyles.emptyInline}>暂无附件资料</div>);
+  }
+  var images = [];
+  var others = [];
+  files.forEach((file, index) => {
+    if (this.isImageAttachment(file, index)) images.push(file);
+    else others.push(file);
+  });
+  return this.renderDetailSection('附件资料', 'paperclip', <div style={detailStyles.fileGrid}>
+      {others.map((file, index) => <div key={'file-' + index}>{this.renderAttachmentCard(file, index)}</div>)}
+      {images.length === 1 && <div>{this.renderAttachmentCard(images[0], 0)}</div>}
+      {images.length > 1 && <div>{this.renderAttachmentCard(images[0], 0, '现场照片（' + images.length + '）', images.length)}</div>}
+    </div>);
+}
+export function renderDetailLayout(row, isMobile) {
+  return <div>
+      {this.renderHeroDetail(row, isMobile)}
+      <div style={isMobile ? detailStyles.bodyGridMobile : detailStyles.bodyGrid}>
+        <main style={detailStyles.leftColumn}>
+          {this.renderContentSection(row)}
+          {this.renderNextActionSection(row)}
+          {this.renderIntelSectionDetail(row)}
+          {this.renderAttachmentsDetail(row)}
+        </main>
+        <aside style={detailStyles.rightColumn}>
+          {this.renderScheduleSection(row)}
+          {this.renderPermissionSection(row)}
+        </aside>
+      </div>
+    </div>;
 }
 var styles = {
   page: {
@@ -1521,30 +1830,682 @@ var styles = {
     fontSize: '14px'
   }
 };
+var detailTokens = {
+  pageBg: '#F5F7FB',
+  cardBg: '#FFFFFF',
+  border: '#E5EAF3',
+  textMain: '#0F172A',
+  textNormal: '#334155',
+  textMuted: '#64748B',
+  primary: '#2563EB',
+  success: '#16A34A',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  radiusLg: '18px',
+  radiusMd: '14px',
+  shadowCard: '0 8px 24px rgba(15, 23, 42, 0.06)'
+};
+var detailStyles = {
+  page: {
+    minHeight: '100vh',
+    background: detailTokens.pageBg,
+    color: detailTokens.textMain,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
+    boxSizing: 'border-box',
+    padding: '20px 20px 36px'
+  },
+  shell: {
+    maxWidth: '1360px',
+    margin: '0 auto',
+    boxSizing: 'border-box'
+  },
+  shellMobile: {
+    padding: '0',
+    boxSizing: 'border-box'
+  },
+  hero: {
+    background: detailTokens.cardBg,
+    border: '1px solid ' + detailTokens.border,
+    borderRadius: detailTokens.radiusLg,
+    padding: '24px 28px 26px',
+    boxShadow: detailTokens.shadowCard,
+    boxSizing: 'border-box',
+    marginBottom: '18px'
+  },
+  backLine: {
+    marginBottom: '14px'
+  },
+  backLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    border: 'none',
+    background: 'transparent',
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    fontWeight: 600,
+    padding: 0,
+    cursor: 'pointer'
+  },
+  heroMain: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '24px'
+  },
+  heroMainMobile: {
+    display: 'grid',
+    gap: '14px'
+  },
+  heroInfo: {
+    minWidth: 0,
+    flex: 1
+  },
+  titleLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap'
+  },
+  title: {
+    margin: 0,
+    color: detailTokens.textMain,
+    fontSize: '27px',
+    lineHeight: '36px',
+    fontWeight: 800,
+    letterSpacing: 0,
+    wordBreak: 'break-word'
+  },
+  metaLine: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '18px',
+    marginTop: '12px',
+    color: detailTokens.textMuted,
+    fontSize: '14px',
+    lineHeight: '22px'
+  },
+  metaItem: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  actions: {
+    display: 'flex',
+    gap: '10px',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    flexShrink: 0
+  },
+  button: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '38px',
+    borderRadius: '10px',
+    padding: '0 16px',
+    fontSize: '14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    lineHeight: '20px',
+    boxSizing: 'border-box',
+    outline: 'none'
+  },
+  buttonInner: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    whiteSpace: 'nowrap'
+  },
+  buttonPrimary: {
+    border: '1px solid ' + detailTokens.primary,
+    background: detailTokens.primary,
+    color: '#FFFFFF',
+    boxShadow: '0 8px 18px rgba(37, 99, 235, 0.20)'
+  },
+  buttonDefault: {
+    border: '1px solid #CBD5E1',
+    background: detailTokens.cardBg,
+    color: detailTokens.textNormal,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)'
+  },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: '24px',
+    padding: '0 9px',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: 700,
+    boxSizing: 'border-box',
+    whiteSpace: 'nowrap'
+  },
+  summaryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '22px',
+    marginTop: '22px'
+  },
+  summaryGridMobile: {
+    display: 'grid',
+    gap: '12px',
+    marginTop: '16px'
+  },
+  summaryCard: {
+    minHeight: '88px',
+    borderRadius: detailTokens.radiusMd,
+    padding: '18px 20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    border: '1px solid ' + detailTokens.border,
+    boxSizing: 'border-box',
+    boxShadow: '0 4px 14px rgba(15, 23, 42, 0.035)'
+  },
+  summaryBlue: {
+    background: '#F8FBFF',
+    borderColor: '#BFDBFE'
+  },
+  summaryGreen: {
+    background: '#F8FFFC',
+    borderColor: '#BAE6D7'
+  },
+  summaryPurple: {
+    background: '#FCFAFF',
+    borderColor: '#DDD6FE'
+  },
+  summaryIconBlue: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '50%',
+    background: '#EFF6FF',
+    color: detailTokens.primary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  summaryIconGreen: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '50%',
+    background: '#DCFCE7',
+    color: detailTokens.success,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  summaryIconPurple: {
+    width: '46px',
+    height: '46px',
+    borderRadius: '50%',
+    background: '#F5F3FF',
+    color: '#7C3AED',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  clickable: {
+    cursor: 'pointer'
+  },
+  summaryText: {
+    minWidth: 0,
+    flex: 1
+  },
+  summaryLabel: {
+    fontSize: '13px',
+    lineHeight: '20px',
+    color: detailTokens.textMuted,
+    fontWeight: 600,
+    marginBottom: '4px'
+  },
+  summaryValue: {
+    fontSize: '16px',
+    lineHeight: '24px',
+    color: detailTokens.textMain,
+    fontWeight: 800,
+    wordBreak: 'break-word'
+  },
+  summaryEmpty: {
+    fontSize: '15px',
+    lineHeight: '23px',
+    color: detailTokens.textMuted,
+    fontWeight: 600,
+    wordBreak: 'break-word'
+  },
+  summaryArrow: {
+    flexShrink: 0,
+    opacity: 0.8
+  },
+  bodyGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 2.05fr) minmax(330px, 1fr)',
+    gap: '22px',
+    alignItems: 'start'
+  },
+  bodyGridMobile: {
+    display: 'grid',
+    gap: '14px'
+  },
+  leftColumn: {
+    display: 'grid',
+    gap: '16px',
+    minWidth: 0
+  },
+  rightColumn: {
+    display: 'grid',
+    gap: '16px',
+    minWidth: 0
+  },
+  card: {
+    background: detailTokens.cardBg,
+    border: '1px solid ' + detailTokens.border,
+    borderRadius: detailTokens.radiusLg,
+    padding: '20px',
+    boxShadow: detailTokens.shadowCard,
+    boxSizing: 'border-box'
+  },
+  cardTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    color: detailTokens.textMain,
+    fontSize: '18px',
+    lineHeight: '26px',
+    fontWeight: 800,
+    marginBottom: '16px'
+  },
+  contentText: {
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '28px',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word'
+  },
+  memoList: {
+    display: 'grid',
+    gap: '7px',
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '25px',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word'
+  },
+  memoLine: {
+    minHeight: '25px'
+  },
+  nextBox: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    borderRadius: '12px',
+    background: '#F4F8FF',
+    border: '1px solid #BFDBFE',
+    color: '#1E40AF',
+    padding: '14px 16px',
+    fontSize: '14px',
+    lineHeight: '24px',
+    fontWeight: 700,
+    boxSizing: 'border-box',
+    whiteSpace: 'pre-wrap'
+  },
+  nextIcon: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    background: '#DBEAFE',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: '1px'
+  },
+  nextText: {
+    minWidth: 0,
+    flex: 1,
+    wordBreak: 'break-word'
+  },
+  followMeta: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '10px',
+    marginTop: '12px',
+    color: detailTokens.textMuted,
+    fontSize: '13px'
+  },
+  followMetaItem: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    minHeight: '28px',
+    padding: '0 10px',
+    border: '1px solid #E2E8F0',
+    borderRadius: '999px',
+    background: '#F8FAFC'
+  },
+  kvList: {
+    display: 'grid'
+  },
+  kvRow: {
+    display: 'grid',
+    gridTemplateColumns: '112px minmax(0, 1fr)',
+    gap: '12px',
+    alignItems: 'center',
+    padding: '11px 0',
+    borderBottom: '1px solid #EEF2F7',
+    fontSize: '14px',
+    lineHeight: '22px'
+  },
+  kvLabel: {
+    color: detailTokens.textMuted,
+    fontWeight: 600
+  },
+  kvValue: {
+    color: detailTokens.textNormal,
+    fontWeight: 600,
+    wordBreak: 'break-word'
+  },
+  recordInfoGroup: {
+    marginTop: '14px',
+    paddingTop: '14px',
+    borderTop: '1px solid #EEF2F7'
+  },
+  recordInfoTitle: {
+    color: detailTokens.textMuted,
+    fontSize: '13px',
+    lineHeight: '20px',
+    fontWeight: 700,
+    marginBottom: '8px'
+  },
+  recordInfoList: {
+    display: 'grid',
+    gap: '8px'
+  },
+  recordInfoRow: {
+    display: 'grid',
+    gridTemplateColumns: '88px minmax(0, 1fr)',
+    gap: '10px',
+    alignItems: 'center',
+    fontSize: '13px',
+    lineHeight: '20px'
+  },
+  recordInfoLabel: {
+    color: '#94A3B8',
+    fontWeight: 600
+  },
+  recordInfoValue: {
+    color: detailTokens.textMuted,
+    wordBreak: 'break-word'
+  },
+  recordNoValue: {
+    color: detailTokens.textMuted,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+    fontSize: '12px',
+    lineHeight: '20px',
+    wordBreak: 'break-all'
+  },
+  peopleGroup: {
+    display: 'grid',
+    gap: '12px'
+  },
+  peopleTitle: {
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '22px',
+    fontWeight: 700
+  },
+  peopleList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '14px'
+  },
+  personItem: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '24px',
+    fontWeight: 600
+  },
+  avatar: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    color: '#FFFFFF',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '13px',
+    fontWeight: 900,
+    boxShadow: '0 5px 12px rgba(15, 23, 42, 0.10)'
+  },
+  avatarBlue: {
+    background: detailTokens.primary
+  },
+  avatarGreen: {
+    background: detailTokens.success
+  },
+  avatarPurple: {
+    background: '#7C3AED'
+  },
+  avatarSlate: {
+    background: '#475569'
+  },
+  peopleDivider: {
+    height: '1px',
+    background: '#E5EAF3',
+    margin: '20px 0'
+  },
+  emptyInline: {
+    color: '#94A3B8',
+    fontSize: '14px',
+    lineHeight: '22px'
+  },
+  intelListDetail: {
+    display: 'grid',
+    gap: '10px'
+  },
+  intelCard: {
+    border: '1px solid #E5EAF3',
+    borderLeft: '3px solid #F59E0B',
+    background: '#FFFFFF',
+    borderRadius: '14px',
+    padding: '14px 16px',
+    boxSizing: 'border-box',
+    boxShadow: '0 4px 14px rgba(15, 23, 42, 0.035)'
+  },
+  intelCardTop: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '12px',
+    marginBottom: '12px'
+  },
+  intelIndex: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    background: '#EFF6FF',
+    color: detailTokens.primary,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: 800,
+    flexShrink: 0,
+    marginTop: '1px'
+  },
+  intelTitleWrap: {
+    minWidth: 0,
+    flex: 1
+  },
+  intelTitle: {
+    color: detailTokens.primary,
+    fontSize: '16px',
+    lineHeight: '24px',
+    fontWeight: 800,
+    wordBreak: 'break-word'
+  },
+  intelBadges: {
+    display: 'flex',
+    gap: '6px',
+    flexWrap: 'wrap',
+    marginTop: '6px'
+  },
+  intelMetaGridDetail: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '12px 16px'
+  },
+  intelMetaGridCompact: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+    gap: '10px 12px'
+  },
+  intelMeta: {
+    display: 'grid',
+    gap: '3px',
+    minWidth: 0,
+    color: detailTokens.textMuted,
+    fontSize: '12px',
+    lineHeight: '18px'
+  },
+  intelMetaValue: {
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '22px',
+    fontWeight: 700,
+    minWidth: 0,
+    wordBreak: 'break-word'
+  },
+  intelHint: {
+    marginTop: '12px',
+    border: '1px solid #FED7AA',
+    background: '#FFF7ED',
+    borderRadius: '10px',
+    padding: '9px 11px',
+    color: detailTokens.textMuted,
+    fontSize: '13px',
+    lineHeight: '20px'
+  },
+  sectionSub: {
+    color: detailTokens.textMuted,
+    fontSize: '13px',
+    lineHeight: '20px',
+    margin: '-6px 0 12px'
+  },
+  statusPills: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '12px'
+  },
+  sectionToolbar: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    margin: '-2px 0 10px',
+    minHeight: '36px'
+  },
+  foldedRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto 20px',
+    gap: '12px',
+    alignItems: 'center',
+    border: '1px solid #BFDBFE',
+    background: '#F8FBFF',
+    color: detailTokens.textMuted,
+    borderRadius: '12px',
+    padding: '11px 12px',
+    marginTop: '10px',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  fileGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: '14px'
+  },
+  fileLink: {
+    textDecoration: 'none',
+    color: 'inherit'
+  },
+  fileCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    minHeight: '62px',
+    border: '1px solid #E5EAF3',
+    borderRadius: '12px',
+    padding: '10px 12px',
+    background: '#FFFFFF',
+    boxSizing: 'border-box'
+  },
+  fileIcon: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '10px',
+    background: '#EFF6FF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  fileInfo: {
+    minWidth: 0,
+    flex: 1
+  },
+  fileName: {
+    color: detailTokens.textNormal,
+    fontSize: '14px',
+    lineHeight: '22px',
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  fileMeta: {
+    color: detailTokens.textMuted,
+    fontSize: '12px',
+    lineHeight: '18px'
+  },
+  notice: {
+    padding: '16px',
+    borderRadius: '12px',
+    background: detailTokens.cardBg,
+    color: detailTokens.textMuted,
+    border: '1px solid ' + detailTokens.border
+  },
+  error: {
+    padding: '16px',
+    borderRadius: '12px',
+    background: '#FEF3F2',
+    color: '#B42318',
+    border: '1px solid #FECDCA'
+  }
+};
 export function renderJsx() {
   var timestamp = this.state && this.state.timestamp;
-  var isMobile = this.utils.isMobile();
+  var isMobile = this.utils.isMobile() || (typeof window !== 'undefined' && window.innerWidth < 980);
   var visit = this.getVisit();
   if (_customState.accessDenied) {
-    return <div style={styles.page}>
+    return <div style={detailStyles.page}>
         <div style={{ display: 'none' }}>{timestamp}</div>
         {this.renderAccessDenied()}
       </div>;
   }
-  return <div style={styles.page}>
+  return <div style={detailStyles.page}>
       <div style={{
       display: 'none'
     }}>{timestamp}</div>
-      <div style={isMobile ? styles.shellMobile : styles.shell}>
-        {this.renderBack(isMobile)}
-        {_customState.loading && <div style={styles.notice}>正在加载拜访记录详情...</div>}
-        {_customState.error && <div style={styles.error}>{_customState.error}</div>}
+      <div style={isMobile ? detailStyles.shellMobile : detailStyles.shell}>
+        {_customState.loading && <div style={detailStyles.notice}>正在加载拜访记录详情...</div>}
+        {_customState.error && <div style={detailStyles.error}>{_customState.error}</div>}
         {!_customState.loading && !visit && this.renderEmpty('未找到拜访记录，请返回列表重新选择')}
-        {!_customState.loading && visit && <div>
-          {this.renderHero(visit, isMobile)}
-          {this.renderTabs()}
-          {this.renderTabContent(visit)}
-        </div>}
+        {!_customState.loading && visit && this.renderDetailLayout(visit, isMobile)}
       </div>
     </div>;
 }

@@ -855,9 +855,9 @@ export function openContactDetail(formInstId) {
 export function handleNav(action) {
   if (action === 'home') this.openForm(FORMS.home);
   if (action === 'contact') this.refreshData();
-  if (action === 'visit') this.openForm(FORMS.visit);
-  if (action === 'project') this.openForm(FORMS.project);
-  if (action === 'unit') this.openForm(FORMS.unit);
+  if (action === 'visit') this.openForm(FORMS.visitManage);
+  if (action === 'project') this.openForm(FORMS.projectManage);
+  if (action === 'unit') this.openForm(FORMS.unitManage);
   if (action === 'reminder') this.openForm(FORMS.reminder);
 }
 export function renderBadge(text, toneName) {

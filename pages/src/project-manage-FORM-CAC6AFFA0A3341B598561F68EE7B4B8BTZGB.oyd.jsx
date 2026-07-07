@@ -8,7 +8,9 @@ var FORMS = {
   unitManage: 'FORM-CA9908793C7C4EA3997B43B5BF5FAA34KEAC',
   page: 'FORM-CAC6AFFA0A3341B598561F68EE7B4B8BTZGB',
   projectDetail: 'FORM-3367C1CD6BDB4FE995BCA69ECFF03419Q0A4',
+  leadDetail: 'FORM-48EA952D879B4D1D94580C2EA14B7AE43HM9',
   project: 'FORM-DC58D4D9EB714ACBB421A34ADFB418ABJCVO',
+  lead: 'FORM-76909065F1B5460E872D3834D95B2DFFK8F0',
   unit: 'FORM-A96B2187A20640C68C9F7806CC1FEADDZZZ8',
   contact: 'FORM-87B25B011DC14AA5ACC39BE4077D520AITQS',
   relation: 'FORM-FB6E6BA777E84128A96E567646E5733DXI0O'
@@ -37,7 +39,21 @@ var FIELDS = {
     recent: 'textareaField_jpjnk9q1c',
     recentDate: 'dateField_jpjnl71j3',
     status: 'selectField_jpjnm9c66',
-    remark: 'textareaField_jpjnn9kdi'
+    remark: 'textareaField_jpjnn9kdi',
+    sourceLead: 'associationFormField_o8c51p6t3'
+  },
+  lead: {
+    title: 'textField_o5hf51ir9',
+    content: 'textareaField_o5hf6dkbq',
+    status: 'selectField_o5hfbq4tf',
+    owner: 'employeeField_5szd78u2t',
+    handlers: 'employeeField_nnet2xu74',
+    contact: 'associationFormField_o5hf21sgj',
+    unit: 'associationFormField_nnet1kq13',
+    mainProject: 'associationFormField_o5hf3lnak',
+    remindDate: 'dateField_5szd6vvxq',
+    validUntil: 'dateField_5szd5xzdb',
+    nextAction: 'textareaField_5szd8976q'
   },
   unit: {
     name: 'textField_gqbk2dh1r',
@@ -78,6 +94,22 @@ var _customState = {
   units: [],
   contacts: [],
   relations: [],
+  convertMode: false,
+  convertLeadId: '',
+  convertLead: null,
+  convertDraft: {
+    name: '',
+    unitId: '',
+    unitTitle: '',
+    summary: '',
+    nextAction: '',
+    planDate: ''
+  },
+  convertDraftReady: false,
+  convertSaving: false,
+  convertSaved: false,
+  createdProjectId: '',
+  createdProjectTitle: '',
   totalProjects: 0,
   refreshTimer: null,
   _isComposing: false
@@ -151,10 +183,13 @@ export function renderAccessDenied() {
 export function didMount() {
   var self = this;
   if (this.denyNormalEmployeeAccess()) return;
+  this.initConvertMode();
   this.loadData(true);
-  _customState.refreshTimer = setInterval(() => {
-    self.loadData(false);
-  }, 90000);
+  if (!_customState.convertMode) {
+    _customState.refreshTimer = setInterval(() => {
+      self.loadData(false);
+    }, 90000);
+  }
 }
 export function didUnmount() {
   if (_customState.refreshTimer) {
@@ -169,7 +204,7 @@ export function loadData(showLoading) {
     _customState.error = '';
     this.forceUpdate();
   }
-  Promise.all([self.loadProjects(), self.loadUnits(), self.loadLightForm(FORMS.contact, 'contacts'), self.loadLightForm(FORMS.relation, 'relations')]).then(() => {
+  Promise.all([self.loadProjects(), self.loadUnits(), self.loadLightForm(FORMS.contact, 'contacts'), self.loadLightForm(FORMS.relation, 'relations'), self.loadConvertLead()]).then(() => {
     _customState.loading = false;
     _customState.error = '';
     self.forceUpdate();
@@ -225,6 +260,53 @@ export function loadLightForm(formUuid, key) {
   }).catch(err => {
     _customState[key] = [];
     return [];
+  });
+}
+export function getPageParam(name) {
+  var params = this.state && this.state.urlParams || {};
+  if (params[name] !== undefined && params[name] !== null && params[name] !== '') return params[name];
+  if (typeof window === 'undefined' || !window.location) return '';
+  var search = window.location.search || '';
+  if (!search) return '';
+  var parts = search.replace(/^\?/, '').split('&');
+  for (var i = 0; i < parts.length; i += 1) {
+    var pair = parts[i].split('=');
+    if (decodeURIComponent(pair[0] || '') === name) return decodeURIComponent(pair.slice(1).join('=') || '');
+  }
+  return '';
+}
+export function initConvertMode() {
+  var mode = this.getPageParam('mode');
+  var action = this.getPageParam('action');
+  var sourceLeadId = this.getPageParam('sourceLeadId') || this.getPageParam('leadId');
+  if (sourceLeadId && (mode === 'leadConvert' || action === 'leadConvert' || this.getPageParam('leadTitle'))) {
+    _customState.convertMode = true;
+    _customState.convertLeadId = sourceLeadId;
+  }
+}
+export function normalizeSingleRow(res) {
+  if (!res) return null;
+  if (res.formData) return res;
+  if (res.data && res.data.formData) return res.data;
+  if (res.content && res.content.formData) return res.content;
+  if (res.result && res.result.formData) return res.result;
+  if (res.content && res.content.data && res.content.data.formData) return res.content.data;
+  return null;
+}
+export function loadConvertLead() {
+  var self = this;
+  if (!_customState.convertMode || !_customState.convertLeadId) return Promise.resolve();
+  return this.utils.yida.getFormDataById({
+    formInstId: _customState.convertLeadId
+  }).then(res => {
+    var row = self.normalizeSingleRow(res);
+    if (row) {
+      _customState.convertLead = row;
+      self.prepareConvertDraft(row);
+    }
+  }).catch(err => {
+    _customState.convertLead = null;
+    _customState.error = '来源线索加载失败：' + self.getErrorMessage(err);
   });
 }
 export function normalizeRows(res) {
@@ -307,12 +389,266 @@ export function getAssociationIds(value) {
     return item.instanceId || item.formInstId || item.formInstanceId || item.id || '';
   }).filter(id => id);
 }
+export function getAssociationFirstItem(value) {
+  var parsed = this.parseMaybeJson(value);
+  if (Array.isArray(parsed)) return parsed[0] || null;
+  return parsed && typeof parsed === 'object' ? parsed : null;
+}
 export function findById(list, id) {
   if (!id) return null;
   var matched = list.filter(item => {
     return this.getRowId(item) === id;
   });
   return matched[0] || null;
+}
+export function getAssociationText(row, fieldId) {
+  var raw = this.rawAssociation(row, fieldId);
+  var item = this.getAssociationFirstItem(raw);
+  if (item) {
+    var title = item.title || item.name || item.label || item.text || item.displayName || '';
+    var text = this.formatValue(title);
+    if (text !== '-') return text;
+  }
+  return this.formatValue(raw);
+}
+export function makeAssociation(formUuid, instanceId, title) {
+  if (!instanceId) return [];
+  return [{
+    formType: 'receipt',
+    formUuid: formUuid,
+    instanceId: instanceId,
+    subTitle: '',
+    appType: APP_TYPE,
+    title: title || ''
+  }];
+}
+export function getLeadTitle(row) {
+  if (!row) return this.getPageParam('leadTitle') || '未命名市场线索';
+  var title = this.getValue(row, FIELDS.lead.title);
+  if (title !== '-') return title;
+  return this.getPageParam('leadTitle') || '未命名市场线索';
+}
+export function getLeadUnitItem(row) {
+  var item = this.getAssociationFirstItem(this.rawAssociation(row, FIELDS.lead.unit));
+  if (item) return item;
+  var id = this.getPageParam('unitId');
+  if (!id) return null;
+  return {
+    instanceId: id,
+    title: this.getPageParam('unitTitle') || ''
+  };
+}
+export function getLeadContactText(row) {
+  var text = row ? this.getAssociationText(row, FIELDS.lead.contact) : this.getPageParam('contactTitle');
+  return text && text !== '-' ? text : '未关联联系人';
+}
+export function timestampToDateInput(value) {
+  var num = Number(value);
+  if (!num) return '';
+  var d = new Date(num);
+  var month = d.getMonth() + 1;
+  var day = d.getDate();
+  var monthText = month < 10 ? '0' + month : '' + month;
+  var dayText = day < 10 ? '0' + day : '' + day;
+  return d.getFullYear() + '-' + monthText + '-' + dayText;
+}
+export function dateInputToTimestamp(value) {
+  if (!value) return '';
+  var time = new Date(value + 'T00:00:00').getTime();
+  return isNaN(time) ? '' : time;
+}
+export function normalizeFieldForSave(value) {
+  var parsed = this.parseMaybeJson(value);
+  if (parsed === undefined || parsed === null || parsed === '' || parsed === '-') return null;
+  if (Array.isArray(parsed) && !parsed.length) return null;
+  return parsed;
+}
+export function getLoginUserIdSafe() {
+  if (this.utils && this.utils.getLoginUserId) return this.utils.getLoginUserId();
+  return typeof window !== 'undefined' && window.loginUser && window.loginUser.userId || '';
+}
+export function getLoginUserNameSafe() {
+  if (this.utils && this.utils.getLoginUserName) return this.utils.getLoginUserName();
+  return typeof window !== 'undefined' && window.loginUser && window.loginUser.userName || '';
+}
+export function getProjectOwnerValue(row) {
+  var ownerId = row ? this.normalizeFieldForSave(this.rawValue(row, FIELDS.lead.owner + '_id')) : null;
+  if (ownerId) return ownerId;
+  var owner = row ? this.normalizeFieldForSave(this.rawValue(row, FIELDS.lead.owner)) : null;
+  if (owner) return owner;
+  var userId = this.getLoginUserIdSafe();
+  return userId ? [userId] : null;
+}
+export function getProjectNextOwnerValue(row) {
+  var handlerIds = row ? this.normalizeFieldForSave(this.rawValue(row, FIELDS.lead.handlers + '_id')) : null;
+  if (handlerIds) return handlerIds;
+  var handlers = row ? this.normalizeFieldForSave(this.rawValue(row, FIELDS.lead.handlers)) : null;
+  if (handlers) return handlers;
+  return this.getProjectOwnerValue(row);
+}
+export function prepareConvertDraft(row) {
+  if (_customState.convertDraftReady) return;
+  var unitItem = this.getLeadUnitItem(row);
+  var remindDate = row ? this.rawValue(row, FIELDS.lead.remindDate) : this.getPageParam('leadRemindDate');
+  var validUntil = row ? this.rawValue(row, FIELDS.lead.validUntil) : this.getPageParam('leadValidUntil');
+  _customState.convertDraft = {
+    name: this.getLeadTitle(row),
+    unitId: unitItem && (unitItem.instanceId || unitItem.formInstId || unitItem.formInstanceId || unitItem.id) || '',
+    unitTitle: unitItem ? this.formatValue(unitItem.title || unitItem.name || unitItem.label || unitItem.text) : '',
+    summary: row ? this.getValue(row, FIELDS.lead.content) !== '-' ? this.getValue(row, FIELDS.lead.content) : '' : this.getPageParam('leadContent'),
+    nextAction: row ? this.getValue(row, FIELDS.lead.nextAction) !== '-' ? this.getValue(row, FIELDS.lead.nextAction) : '' : this.getPageParam('leadNextAction'),
+    planDate: this.timestampToDateInput(remindDate || validUntil)
+  };
+  _customState.convertDraftReady = true;
+}
+export function getUnitOptions() {
+  var exists = {};
+  var list = [];
+  var draft = _customState.convertDraft || {};
+  if (draft.unitId) {
+    exists[draft.unitId] = true;
+    list.push({
+      id: draft.unitId,
+      title: draft.unitTitle || '来源单位'
+    });
+  }
+  (_customState.units || []).forEach(unit => {
+    var id = this.getRowId(unit);
+    if (!id || exists[id]) return;
+    exists[id] = true;
+    list.push({
+      id: id,
+      title: this.getValue(unit, FIELDS.unit.name)
+    });
+  });
+  return list;
+}
+export function handleConvertDraftChange(key, value) {
+  _customState.convertDraft = _customState.convertDraft || {};
+  _customState.convertDraft[key] = value;
+}
+export function handleConvertUnitChange(value) {
+  var id = value || '';
+  var unit = this.findById(_customState.units, id);
+  _customState.convertDraft.unitId = id || '';
+  _customState.convertDraft.unitTitle = unit ? this.getValue(unit, FIELDS.unit.name) : '';
+  this.forceUpdate();
+}
+export function getConvertedProjectFromLead(row) {
+  if (!row) return null;
+  var leadId = this.getRowId(row);
+  var mainIds = this.getAssociationIds(this.rawAssociation(row, FIELDS.lead.mainProject));
+  for (var i = 0; i < mainIds.length; i += 1) {
+    var mainProject = this.findById(_customState.projects, mainIds[i]);
+    if (mainProject) return mainProject;
+  }
+  for (var j = 0; j < _customState.projects.length; j += 1) {
+    var project = _customState.projects[j];
+    if (this.rowMatchesAssociation(project, FIELDS.project.sourceLead, leadId)) return project;
+  }
+  return null;
+}
+export function openProjectDetailById(projectId) {
+  if (!projectId) return;
+  this.utils.router.push(FORMS.projectDetail, {
+    projectId: projectId
+  }, false);
+}
+export function returnToSourceLead() {
+  var leadId = _customState.convertLeadId;
+  if (!leadId) {
+    this.utils.router.push(FORMS.projectManage, {}, false);
+    return;
+  }
+  this.utils.router.push(FORMS.leadDetail, {
+    leadId: leadId
+  }, false);
+}
+export function getCreatedProjectId(res) {
+  if (!res) return '';
+  if (typeof res === 'string') return res;
+  return res.result || res.data || res.content && (res.content.result || res.content.formInstId || res.content.instanceId) || res.formInstId || res.instanceId || '';
+}
+export function saveConvertedProject() {
+  var self = this;
+  var row = _customState.convertLead;
+  var leadId = _customState.convertLeadId || this.getRowId(row);
+  if (_customState.convertSaving || !leadId) return;
+  var existed = this.getConvertedProjectFromLead(row);
+  if (existed) {
+    _customState.createdProjectId = this.getRowId(existed);
+    _customState.createdProjectTitle = this.getValue(existed, FIELDS.project.name);
+    _customState.convertSaved = true;
+    this.forceUpdate();
+    this.utils.toast({
+      title: '当前线索已关联项目，不能重复创建。',
+      type: 'warning'
+    });
+    return;
+  }
+  var draft = _customState.convertDraft || {};
+  var projectName = (draft.name || '').trim();
+  if (!projectName) {
+    this.utils.toast({
+      title: '请填写项目名称',
+      type: 'warning'
+    });
+    return;
+  }
+  _customState.convertSaving = true;
+  this.forceUpdate();
+  var now = new Date().getTime();
+  var projectPayload = {};
+  projectPayload[FIELDS.project.name] = projectName;
+  projectPayload[FIELDS.project.phase] = '线索';
+  projectPayload[FIELDS.project.status] = '正常';
+  projectPayload[FIELDS.project.summary] = draft.summary || '';
+  projectPayload[FIELDS.project.nextAction] = draft.nextAction || '';
+  projectPayload[FIELDS.project.recentDate] = now;
+  projectPayload[FIELDS.project.sourceLead] = this.makeAssociation(FORMS.lead, leadId, this.getLeadTitle(row));
+  var planTime = this.dateInputToTimestamp(draft.planDate);
+  if (planTime) projectPayload[FIELDS.project.nextDate] = planTime;
+  if (draft.unitId) projectPayload[FIELDS.project.unit] = this.makeAssociation(FORMS.unit, draft.unitId, draft.unitTitle);
+  var ownerValue = this.getProjectOwnerValue(row);
+  if (ownerValue) projectPayload[FIELDS.project.owner] = ownerValue;
+  var nextOwnerValue = this.getProjectNextOwnerValue(row);
+  if (nextOwnerValue) projectPayload[FIELDS.project.nextOwner] = nextOwnerValue;
+  this.utils.yida.saveFormData({
+    formUuid: FORMS.project,
+    appType: APP_TYPE,
+    formDataJson: JSON.stringify(projectPayload)
+  }).then(res => {
+    var projectId = self.getCreatedProjectId(res);
+    if (!projectId) throw new Error('项目已保存但未返回实例 ID');
+    var leadPayload = {};
+    leadPayload[FIELDS.lead.status] = '已转项目';
+    leadPayload[FIELDS.lead.mainProject] = self.makeAssociation(FORMS.project, projectId, projectName);
+    return self.utils.yida.updateFormData({
+      formInstId: leadId,
+      updateFormDataJson: JSON.stringify(leadPayload),
+      useLatestVersion: 'y'
+    }).catch(err => {
+      throw err;
+    }).then(() => {
+      _customState.convertSaving = false;
+      _customState.convertSaved = true;
+      _customState.createdProjectId = projectId;
+      _customState.createdProjectTitle = projectName;
+      self.utils.toast({
+        title: '项目已创建，并已关联当前线索。',
+        type: 'success',
+        size: 'large'
+      });
+      self.loadData(false);
+    });
+  }).catch(err => {
+    _customState.convertSaving = false;
+    self.forceUpdate();
+    self.utils.toast({
+      title: '保存项目失败：' + self.getErrorMessage(err),
+      type: 'error'
+    });
+  });
 }
 export function getUnitName(row) {
   var raw = this.rawValue(row, FIELDS.project.unit);
@@ -732,6 +1068,149 @@ export function renderList(isMobile) {
 export function renderEmpty(text) {
   return <div style={styles.empty}>{text}</div>;
 }
+export function renderConvertReadonly(label, value, note) {
+  return <div style={styles.convertReadonly}>
+      <div style={styles.convertLabel}>{label}</div>
+      <div style={styles.convertReadonlyValue}>{value && value !== '-' ? value : '未填写'}</div>
+      {note && <div style={styles.convertFieldNote}>{note}</div>}
+    </div>;
+}
+export function renderConvertTextInput(label, key, placeholder) {
+  var self = this;
+  var draft = _customState.convertDraft || {};
+  return <label style={styles.convertField}>
+      <span style={styles.convertLabel}>{label}</span>
+      <input defaultValue={draft[key] || ''} placeholder={placeholder || ''} onChange={e => {
+      self.handleConvertDraftChange(key, e && e.target ? e.target.value : '');
+    }} style={styles.convertInput} />
+    </label>;
+}
+export function renderConvertTextarea(label, key, placeholder) {
+  var self = this;
+  var draft = _customState.convertDraft || {};
+  return <label style={styles.convertField}>
+      <span style={styles.convertLabel}>{label}</span>
+      <textarea defaultValue={draft[key] || ''} placeholder={placeholder || ''} onChange={e => {
+      self.handleConvertDraftChange(key, e && e.target ? e.target.value : '');
+    }} style={styles.convertTextarea} />
+    </label>;
+}
+export function renderConvertUnitSelect() {
+  var self = this;
+  var draft = _customState.convertDraft || {};
+  var options = this.getUnitOptions();
+  return <div style={styles.convertField}>
+      <span style={styles.convertLabel}>所属单位</span>
+      <div style={styles.unitChoiceWrap}>
+        <button type="button" onClick={e => {
+        self.handleConvertUnitChange('');
+      }} style={Object.assign({}, styles.unitChoice, !draft.unitId ? styles.unitChoiceActive : {})}>未选择</button>
+        {options.slice(0, 12).map(item => <button key={item.id} type="button" onClick={e => {
+        self.handleConvertUnitChange(item.id);
+      }} style={Object.assign({}, styles.unitChoice, draft.unitId === item.id ? styles.unitChoiceActive : {})}>{item.title}</button>)}
+      </div>
+    </div>;
+}
+export function renderConvertPlanDate() {
+  var self = this;
+  var draft = _customState.convertDraft || {};
+  return <label style={styles.convertField}>
+      <span style={styles.convertLabel}>计划日期</span>
+      <input type="date" defaultValue={draft.planDate || ''} onChange={e => {
+      self.handleConvertDraftChange('planDate', e && e.target ? e.target.value : '');
+    }} style={styles.convertInput} />
+    </label>;
+}
+export function renderConvertSuccess() {
+  return <div style={styles.convertShell}>
+      <div style={styles.convertSuccess}>
+        <div style={styles.convertSuccessTitle}>项目已创建，并已关联当前线索。</div>
+        <div style={styles.convertSuccessSub}>{_customState.createdProjectTitle || '新项目'} 已写入项目档案，当前线索已回写为“已转项目”。</div>
+        <div style={styles.convertActions}>
+          {this.renderButton('查看项目', 'primary', e => {
+          this.openProjectDetailById(_customState.createdProjectId);
+        })}
+          {this.renderButton('返回线索', 'default', e => {
+          this.returnToSourceLead();
+        })}
+        </div>
+      </div>
+    </div>;
+}
+export function renderConvertAlready(project) {
+  var projectId = project ? this.getRowId(project) : '';
+  var projectTitle = project ? this.getValue(project, FIELDS.project.name) : '';
+  return <div style={styles.convertShell}>
+      <div style={styles.convertWarning}>
+        <div style={styles.convertSuccessTitle}>当前线索已转为项目</div>
+        <div style={styles.convertSuccessSub}>{projectTitle || '该线索已标记为已转项目'}，不能重复创建第二个项目。</div>
+        <div style={styles.convertActions}>
+          {projectId && this.renderButton('查看项目', 'primary', e => {
+          this.openProjectDetailById(projectId);
+        })}
+          {this.renderButton('返回线索', 'default', e => {
+          this.returnToSourceLead();
+        })}
+        </div>
+      </div>
+    </div>;
+}
+export function renderConvertForm(row, isMobile) {
+  var self = this;
+  var leadTitle = this.getLeadTitle(row);
+  var ownerText = this.getValue(row, FIELDS.lead.owner);
+  if (ownerText === '-') ownerText = this.getLoginUserNameSafe() || '当前登录人';
+  var nextOwnerText = this.getValue(row, FIELDS.lead.handlers);
+  if (nextOwnerText === '-') nextOwnerText = ownerText;
+  return <div style={styles.convertShell}>
+      <div style={styles.convertHeader}>
+        <button type="button" onClick={e => {
+        self.returnToSourceLead();
+      }} style={styles.backToLeadButton}>返回线索</button>
+        <div style={styles.convertTitle}>项目新增</div>
+      </div>
+      <div style={styles.sourceBanner}>
+        <div style={styles.sourceTitle}>来源线索：{leadTitle}</div>
+        <div style={styles.sourceText}>系统已自动带入联系人、单位、线索内容和后续动作，保存项目后将自动回写线索。</div>
+      </div>
+      <div style={isMobile ? styles.convertGridMobile : styles.convertGrid}>
+        {this.renderConvertTextInput('项目名称', 'name', '请输入项目名称')}
+        {this.renderConvertReadonly('来源线索', leadTitle, '保存时自动写入，不需要再次选择')}
+        {this.renderConvertUnitSelect()}
+        {this.renderConvertReadonly('关联联系人', this.getLeadContactText(row), '项目档案暂无联系人字段，保留为来源上下文')}
+        {this.renderConvertReadonly('项目负责人', ownerText, '')}
+        {this.renderConvertReadonly('下一步负责人', nextOwnerText, '')}
+        <div style={styles.convertFull}>{this.renderConvertTextarea('项目摘要', 'summary', '请输入项目摘要')}</div>
+        <div style={styles.convertFull}>{this.renderConvertTextarea('下一步动作', 'nextAction', '请输入下一步动作')}</div>
+        {this.renderConvertPlanDate()}
+      </div>
+      <div style={styles.convertActions}>
+        <button type="button" disabled={_customState.convertSaving} onClick={e => {
+        self.saveConvertedProject();
+      }} style={Object.assign({}, styles.button, styles.buttonPrimary, _customState.convertSaving ? styles.buttonDisabled : {})}>{_customState.convertSaving ? '保存中...' : '保存项目'}</button>
+        {this.renderButton('返回线索', 'default', e => {
+        self.returnToSourceLead();
+      })}
+      </div>
+    </div>;
+}
+export function renderConvertPage(isMobile) {
+  var row = _customState.convertLead;
+  if (_customState.convertSaved) return this.renderConvertSuccess();
+  if (_customState.loading) {
+    return <div style={styles.convertShell}>
+        <div style={styles.notice}>正在加载来源线索...</div>
+      </div>;
+  }
+  if (!row) {
+    return <div style={styles.convertShell}>
+        {this.renderEmpty('未找到来源线索，请返回线索页重新发起转为项目')}
+      </div>;
+  }
+  var existed = this.getConvertedProjectFromLead(row);
+  if (existed || this.getValue(row, FIELDS.lead.status) === '已转项目') return this.renderConvertAlready(existed);
+  return this.renderConvertForm(row, isMobile);
+}
 var styles = {
   page: {
     minHeight: '100vh',
@@ -770,6 +1249,191 @@ var styles = {
   contentMobile: {
     padding: '14px 12px 24px',
     boxSizing: 'border-box'
+  },
+  convertShell: {
+    maxWidth: '980px',
+    margin: '0 auto',
+    padding: '24px 32px 36px',
+    boxSizing: 'border-box'
+  },
+  convertHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '14px'
+  },
+  backToLeadButton: {
+    height: '32px',
+    borderRadius: '8px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#344054',
+    cursor: 'pointer',
+    padding: '0 10px',
+    fontSize: '13px',
+    fontWeight: 700
+  },
+  convertTitle: {
+    fontSize: '22px',
+    lineHeight: '30px',
+    fontWeight: 850,
+    color: '#101828'
+  },
+  sourceBanner: {
+    background: '#EFF6FF',
+    border: '1px solid #B9D6FF',
+    borderRadius: '8px',
+    padding: '14px 16px',
+    marginBottom: '14px',
+    boxSizing: 'border-box'
+  },
+  sourceTitle: {
+    color: '#155EEF',
+    fontSize: '15px',
+    lineHeight: '22px',
+    fontWeight: 850
+  },
+  sourceText: {
+    color: '#344054',
+    fontSize: '13px',
+    lineHeight: '20px',
+    marginTop: '4px'
+  },
+  convertGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '12px',
+    background: '#FFFFFF',
+    border: '1px solid #EAECF0',
+    borderRadius: '8px',
+    padding: '16px',
+    boxSizing: 'border-box'
+  },
+  convertGridMobile: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '12px',
+    background: '#FFFFFF',
+    border: '1px solid #EAECF0',
+    borderRadius: '8px',
+    padding: '14px',
+    boxSizing: 'border-box'
+  },
+  convertFull: {
+    gridColumn: '1 / -1'
+  },
+  convertField: {
+    display: 'grid',
+    gap: '6px'
+  },
+  convertLabel: {
+    color: '#475467',
+    fontSize: '13px',
+    lineHeight: '18px',
+    fontWeight: 750
+  },
+  convertInput: {
+    width: '100%',
+    height: '38px',
+    borderRadius: '8px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#101828',
+    padding: '0 10px',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  unitChoiceWrap: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px'
+  },
+  unitChoice: {
+    minHeight: '32px',
+    borderRadius: '8px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#344054',
+    padding: '5px 10px',
+    fontSize: '13px',
+    lineHeight: '18px',
+    cursor: 'pointer',
+    boxSizing: 'border-box'
+  },
+  unitChoiceActive: {
+    background: '#EAF2FF',
+    color: '#155EEF',
+    borderColor: '#B9D6FF',
+    fontWeight: 800
+  },
+  convertTextarea: {
+    width: '100%',
+    minHeight: '88px',
+    borderRadius: '8px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#101828',
+    padding: '10px',
+    fontSize: '14px',
+    lineHeight: '20px',
+    outline: 'none',
+    resize: 'vertical',
+    boxSizing: 'border-box'
+  },
+  convertReadonly: {
+    display: 'grid',
+    gap: '6px',
+    borderRadius: '8px',
+    border: '1px solid #EAECF0',
+    background: '#F8FAFC',
+    padding: '9px 10px',
+    boxSizing: 'border-box',
+    minHeight: '68px'
+  },
+  convertReadonlyValue: {
+    color: '#101828',
+    fontSize: '14px',
+    lineHeight: '20px',
+    fontWeight: 700,
+    wordBreak: 'break-word'
+  },
+  convertFieldNote: {
+    color: '#667085',
+    fontSize: '12px',
+    lineHeight: '18px'
+  },
+  convertActions: {
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginTop: '16px'
+  },
+  convertSuccess: {
+    background: '#ECFDF3',
+    border: '1px solid #ABEFC6',
+    borderRadius: '8px',
+    padding: '24px',
+    boxSizing: 'border-box'
+  },
+  convertWarning: {
+    background: '#FFF7E6',
+    border: '1px solid #FEDF89',
+    borderRadius: '8px',
+    padding: '24px',
+    boxSizing: 'border-box'
+  },
+  convertSuccessTitle: {
+    color: '#101828',
+    fontSize: '20px',
+    lineHeight: '28px',
+    fontWeight: 850
+  },
+  convertSuccessSub: {
+    color: '#475467',
+    fontSize: '14px',
+    lineHeight: '22px',
+    marginTop: '6px'
   },
   hero: {
     display: 'flex',
@@ -819,6 +1483,10 @@ var styles = {
     background: '#FFFFFF',
     color: '#344054',
     border: '1px solid #D0D5DD'
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+    cursor: 'not-allowed'
   },
   notice: {
     padding: '10px 12px',
@@ -1182,6 +1850,14 @@ export function renderJsx() {
     return <div style={styles.page}>
         <div style={{ display: 'none' }}>{timestamp}</div>
         {this.renderAccessDenied()}
+      </div>;
+  }
+  if (_customState.convertMode) {
+    return <div style={styles.page}>
+        <div style={{
+        display: 'none'
+      }}>{timestamp}</div>
+        {this.renderConvertPage(isMobile)}
       </div>;
   }
   return <div style={styles.page}>

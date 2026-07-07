@@ -1639,12 +1639,10 @@ export function openReminderDetail(row) {
   this.openNativeDetailForm(FORMS.reminder, id);
 }
 export function openIntelList() {
-  this.openNativeForm(FORMS.intel);
+  this.openMarketLeadList();
 }
 export function openIntelDetail(row) {
-  var id = this.getRowId(row);
-  if (!id) return;
-  this.openNativeDetailForm(FORMS.intel, id);
+  this.openLeadDetail(row);
 }
 export function setWorkTab(key) {
   _customState.activeWorkTab = key || 'follow';
@@ -1665,10 +1663,6 @@ export function openWorkItem(item) {
     return;
   }
   if (item.type === 'visit') {
-    if (item.leadRow) {
-      this.openLeadDetail(item.leadRow);
-      return;
-    }
     this.openVisitDetail(item.row);
     return;
   }
@@ -2212,7 +2206,7 @@ export function renderVisitItem(item) {
 export function renderHomeUpdatesPanel() {
   var updates = this.getHomeUpdates();
   var hasUnread = this.hasUnreadHomeUpdates(updates);
-  var visible = updates.slice(0, 3);
+  var visible = _customState.showAllHomeUpdates ? updates : updates.slice(0, 3);
   return <div onClick={e => {
     if (hasUnread) this.markHomeUpdatesRead(updates);
   }} style={Object.assign({}, styles.panel, styles.updatePanel)}>
@@ -2225,8 +2219,8 @@ export function renderHomeUpdatesPanel() {
         <div style={styles.updateActions}>
           {updates.length > 3 && <button onClick={e => {
           e.stopPropagation();
-          this.markHomeUpdatesRead(updates);
-        }} style={styles.updateTextButton}>查看全部</button>}
+          this.toggleHomeUpdatesAll();
+        }} style={styles.updateTextButton}>{_customState.showAllHomeUpdates ? '收起' : '查看全部'}</button>}
           {hasUnread && <button onClick={e => {
           e.stopPropagation();
           this.markHomeUpdatesRead(updates);
