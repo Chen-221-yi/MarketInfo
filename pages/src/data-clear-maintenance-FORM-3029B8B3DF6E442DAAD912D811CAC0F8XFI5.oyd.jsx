@@ -216,15 +216,16 @@ export function fetchFormRows(formItem, page, accRows) {
   var self = this;
   var currentPage = page || 1;
   var allRows = accRows || [];
+  var pageSize = 50;
   return self.utils.yida.searchFormDatas({
     formUuid: formItem.formUuid,
     currentPage: currentPage,
-    pageSize: 100
+    pageSize: pageSize
   }).then(res => {
     var rows = self.normalizeRows(res);
     var total = self.normalizeTotal(res, 0);
     allRows = allRows.concat(rows);
-    if (rows.length >= 100 && (!total || allRows.length < total)) {
+    if (rows.length >= pageSize && (!total || allRows.length < total)) {
       return self.fetchFormRows(formItem, currentPage + 1, allRows);
     }
     return allRows;

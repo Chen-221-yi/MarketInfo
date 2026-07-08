@@ -177,7 +177,7 @@ export function fetchProjects() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.project,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).catch(err => {
     this.utils.toast({
@@ -191,7 +191,7 @@ export function fetchFormRows(formUuid) {
   return this.utils.yida.searchFormDatas({
     formUuid: formUuid,
     currentPage: 1,
-    pageSize: 100
+    pageSize: 50
   }).catch(err => {
     this.utils.toast({
       title: '关联数据加载失败',

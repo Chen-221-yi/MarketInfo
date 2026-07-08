@@ -186,7 +186,7 @@ export function loadLeads() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.lead,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     _customState.leads = this.normalizeRows(res);
@@ -201,7 +201,7 @@ export function loadVisits() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.visit,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     _customState.visits = this.normalizeRows(res);
@@ -216,7 +216,7 @@ export function loadProjects() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.project,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     _customState.projects = this.normalizeRows(res);

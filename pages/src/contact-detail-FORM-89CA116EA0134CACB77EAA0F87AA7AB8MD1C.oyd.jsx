@@ -363,7 +363,7 @@ export function loadForm(formUuid, key) {
   return this.utils.yida.searchFormDatas({
     formUuid: formUuid,
     currentPage: 1,
-    pageSize: 100
+    pageSize: 50
   }).then(res => {
     _customState[key] = this.normalizeRows(res);
     return _customState[key];

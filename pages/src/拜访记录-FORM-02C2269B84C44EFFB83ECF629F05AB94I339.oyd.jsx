@@ -134,7 +134,7 @@ export function loadVisits(showLoading) {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.visit,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     var rows = self.normalizeRows(res);

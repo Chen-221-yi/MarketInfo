@@ -194,7 +194,7 @@ export function loadVisitsData() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.visit,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     _customState.visits = this.normalizeRows(res);
@@ -210,7 +210,7 @@ export function loadIntelData() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.intel,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     _customState.intel = this.normalizeRows(res);

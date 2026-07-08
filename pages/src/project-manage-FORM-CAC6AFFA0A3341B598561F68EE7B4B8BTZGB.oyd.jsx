@@ -224,7 +224,7 @@ export function loadProjects() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.project,
     currentPage: 1,
-    pageSize: 100,
+    pageSize: 50,
     dynamicOrder: JSON.stringify(order)
   }).then(res => {
     var rows = this.normalizeRows(res);
@@ -242,7 +242,7 @@ export function loadUnits() {
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.unit,
     currentPage: 1,
-    pageSize: 100
+    pageSize: 50
   }).then(res => {
     _customState.units = this.normalizeRows(res);
   }).catch(err => {
@@ -254,7 +254,7 @@ export function loadLightForm(formUuid, key) {
   return this.utils.yida.searchFormDatas({
     formUuid: formUuid,
     currentPage: 1,
-    pageSize: 100
+    pageSize: 50
   }).then(res => {
     _customState[key] = this.normalizeRows(res);
   }).catch(err => {

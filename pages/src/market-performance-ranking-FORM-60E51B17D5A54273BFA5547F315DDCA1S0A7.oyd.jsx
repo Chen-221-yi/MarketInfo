@@ -821,7 +821,7 @@ export function loadMarketPerformanceData() {
 }
 export function fetchPerformancePage(page, collected) {
   var self = this;
-  var pageSize = 100;
+  var pageSize = 50;
   return this.utils.yida.searchFormDatas({
     formUuid: FORMS.performanceDetail,
     currentPage: page,

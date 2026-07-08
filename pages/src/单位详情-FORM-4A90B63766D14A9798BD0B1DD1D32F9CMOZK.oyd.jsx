@@ -177,7 +177,7 @@ export function fetchRows(formUuid) {
   return this.utils.yida.searchFormDatas({
     formUuid: formUuid,
     currentPage: 1,
-    pageSize: 100
+    pageSize: 50
   }).catch(err => {
     this.utils.toast({
       title: '关联数据加载失败',
@@ -188,7 +188,7 @@ export function fetchRows(formUuid) {
 }
 export function fetchAllRows(formUuid) {
   var self = this;
-  var pageSize = 100;
+  var pageSize = 50;
   var allRows = [];
   var total = 0;
   var fetchPage = page => {

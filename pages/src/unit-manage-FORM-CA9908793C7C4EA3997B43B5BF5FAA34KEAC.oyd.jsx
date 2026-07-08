@@ -526,7 +526,7 @@ export function loadLightForm(formUuid, key) {
 }
 export function loadPagedForm(formUuid) {
   var self = this;
-  var pageSize = 100;
+  var pageSize = 50;
   var allRows = [];
   var total = 0;
   var fetchPage = page => {
