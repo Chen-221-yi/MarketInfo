@@ -239,6 +239,9 @@ var _customState = {
   socialRelations: [],
   privateProfileSaving: false,
   wechatClaimSaving: false,
+  contactQuickEditKey: '',
+  contactQuickEditDraft: '',
+  contactQuickSavingKey: '',
   tagEditorOpen: false,
   tagSaving: false,
   tagDraft: '',
@@ -1745,6 +1748,9 @@ export function renderMiniIcon(name, color, size) {
   if (name === 'user') return <svg {...common}><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg>;
   if (name === 'briefcase') return <svg {...common}><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M3 12h18"></path></svg>;
   if (name === 'phone') return <svg {...common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.91.33 1.8.63 2.65a2 2 0 0 1-.45 2.11L8 9.77a16 16 0 0 0 6 6l1.29-1.29a2 2 0 0 1 2.11-.45c.85.3 1.74.51 2.65.63A2 2 0 0 1 22 16.92z"></path></svg>;
+  if (name === 'smartphone') return <svg {...common}><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M12 18h.01"></path></svg>;
+  if (name === 'message') return <svg {...common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>;
+  if (name === 'copy') return <svg {...common}><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>;
   if (name === 'image') return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>;
   if (name === 'heart') return <svg {...common}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"></path></svg>;
   if (name === 'users') return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
@@ -1764,6 +1770,279 @@ export function renderButton(label, type, onClick) {
   }} style={Object.assign({}, styles.button, primary ? styles.buttonPrimary : styles.buttonDefault)}>
       {this.renderMiniIcon(label === '编辑' ? 'edit' : 'file', primary ? '#FFFFFF' : '#344054', 14)}{label}
     </button>;
+}
+export function getActionableContactValue(value) {
+  var text = value === undefined || value === null ? '' : String(value).trim();
+  if (!text || text === '-' || text === '待补充' || text === '权限受限') return '';
+  return text;
+}
+export function getContactDisplayState(value, visible) {
+  var rawText = value === undefined || value === null ? '' : String(value).trim();
+  if (visible === false) {
+    return {
+      text: '权限受限',
+      muted: true,
+      limited: true,
+      canAction: false
+    };
+  }
+  if (rawText === '权限受限') {
+    return {
+      text: '权限受限',
+      muted: true,
+      limited: true,
+      canAction: false
+    };
+  }
+  var text = this.getActionableContactValue(value);
+  if (!text) {
+    return {
+      text: '待补充',
+      muted: true,
+      limited: false,
+      canAction: false
+    };
+  }
+  return {
+    text: text,
+    muted: false,
+    limited: false,
+    canAction: true
+  };
+}
+export function canEditContactQuickly() {
+  return !_customState.accessDenied && !this.isNormalEmployeeRole();
+}
+export function startContactQuickEdit(method) {
+  if (!method || !method.key || !method.fieldId || !this.canEditContactQuickly() || method.visible === false || method.masked === true) return;
+  _customState.contactQuickEditKey = method.key;
+  _customState.contactQuickEditDraft = this.getActionableContactValue(method.value);
+  _customState.contactQuickSavingKey = '';
+  this.forceUpdate();
+}
+export function cancelContactQuickEdit() {
+  if (_customState.contactQuickSavingKey) return;
+  _customState.contactQuickEditKey = '';
+  _customState.contactQuickEditDraft = '';
+  this.forceUpdate();
+}
+export function handleContactQuickDraftChange(e) {
+  if (this._isContactQuickComposing) return;
+  _customState.contactQuickEditDraft = e && e.target ? e.target.value : '';
+}
+export function handleContactQuickDraftCompositionEnd(e) {
+  this._isContactQuickComposing = false;
+  _customState.contactQuickEditDraft = e && e.target ? e.target.value : '';
+}
+export function getContactQuickInputId(method) {
+  return 'contact-quick-input-' + (method && method.key || '');
+}
+export function getContactQuickDraft(method) {
+  var input = typeof document !== 'undefined' ? document.getElementById(this.getContactQuickInputId(method)) : null;
+  if (input && input.value !== undefined) return input.value;
+  return _customState.contactQuickEditDraft || '';
+}
+export function normalizeContactQuickValue(key, value) {
+  var text = value === undefined || value === null ? '' : String(value).trim();
+  if (key === 'mobile') return text.replace(/[\s-]/g, '');
+  return text;
+}
+export function validateContactQuickValue(key, value) {
+  if (!value) return '';
+  if (key === 'mobile' && !/^1\d{10}$/.test(value)) return '请输入11位手机号';
+  if (key === 'workPhone' && !/^[0-9+\-()\s#转分机]{1,40}$/.test(value)) return '工作电话仅支持数字、区号、短横线和分机号';
+  if (key === 'wechat' && !/^[A-Za-z0-9_-]{1,40}$/.test(value)) return '微信号仅支持字母、数字、下划线和短横线';
+  return '';
+}
+export function saveContactQuickEdit(method) {
+  if (!method || !method.key || !method.fieldId || _customState.contactQuickSavingKey) return;
+  if (!this.canEditContactQuickly() || method.visible === false || method.masked === true) {
+    this.utils.toast({
+      title: '暂无编辑权限',
+      type: 'warning'
+    });
+    return;
+  }
+  var contact = this.getContact();
+  var id = this.getRowId(contact);
+  if (!id) {
+    this.utils.toast({
+      title: '未找到联系人数据',
+      type: 'error'
+    });
+    return;
+  }
+  var nextValue = this.normalizeContactQuickValue(method.key, this.getContactQuickDraft(method));
+  var validation = this.validateContactQuickValue(method.key, nextValue);
+  if (validation) {
+    this.utils.toast({
+      title: validation,
+      type: 'warning'
+    });
+    return;
+  }
+  var payload = {};
+  payload[method.fieldId] = nextValue;
+  _customState.contactQuickSavingKey = method.key;
+  this.forceUpdate();
+  this.utils.yida.updateFormData({
+    formInstId: id,
+    updateFormDataJson: JSON.stringify(payload),
+    useLatestVersion: 'y'
+  }).then(() => {
+    return this.loadForm(FORMS.contact, 'contacts');
+  }).then(() => {
+    _customState.contactQuickSavingKey = '';
+    _customState.contactQuickEditKey = '';
+    _customState.contactQuickEditDraft = '';
+    this.forceUpdate();
+    this.utils.toast({
+      title: '已保存',
+      type: 'success'
+    });
+  }).catch(error => {
+    _customState.contactQuickSavingKey = '';
+    this.forceUpdate();
+    this.utils.toast({
+      title: this.getErrorMessage(error) || '保存失败',
+      type: 'error'
+    });
+  });
+}
+export function copyContactText(value) {
+  var text = this.getActionableContactValue(value);
+  if (!text) {
+    this.utils.toast({
+      title: '暂无可复制内容',
+      type: 'warning'
+    });
+    return;
+  }
+  var self = this;
+  if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () {
+      self.utils.toast({
+        title: '已复制',
+        type: 'success'
+      });
+    }).catch(function () {
+      self.copyContactTextFallback(text);
+    });
+    return;
+  }
+  this.copyContactTextFallback(text);
+}
+export function copyContactTextFallback(text) {
+  var input = document.createElement('textarea');
+  input.value = text;
+  input.setAttribute('readonly', 'readonly');
+  input.style.position = 'fixed';
+  input.style.left = '-9999px';
+  document.body.appendChild(input);
+  input.select();
+  var success = false;
+  try {
+    success = document.execCommand('copy');
+  } catch (err) {
+    success = false;
+  }
+  document.body.removeChild(input);
+  this.utils.toast({
+    title: success ? '已复制' : '复制失败，请手动复制',
+    type: success ? 'success' : 'warning'
+  });
+}
+export function callContactPhone(value) {
+  var text = this.getActionableContactValue(value);
+  if (!text) {
+    this.utils.toast({
+      title: '暂无可拨打号码',
+      type: 'warning'
+    });
+    return;
+  }
+  var phone = text.replace(/[^\d+]/g, '');
+  window.location.href = 'tel:' + (phone || text);
+}
+export function renderContactMethodCard(method, isMobile) {
+  var self = this;
+  var display = this.getContactDisplayState(method.value, method.visible);
+  var editing = _customState.contactQuickEditKey === method.key;
+  var saving = _customState.contactQuickSavingKey === method.key;
+  var canAction = display.canAction && display.limited !== true && method.masked !== true;
+  var canEdit = method.editable === true && display.limited !== true && method.masked !== true;
+  var cardStyle = Object.assign({}, styles.contactMethodCard, isMobile ? styles.contactMethodCardMobile : {}, method.primary ? styles.contactMethodCardPrimary : {});
+  var iconStyle = Object.assign({}, styles.contactMethodIcon, method.primary ? styles.contactMethodIconPrimary : {});
+  var valueStyle = Object.assign({}, method.primary ? styles.contactMethodValuePrimary : styles.contactMethodValue, display.muted ? styles.contactMethodValueMuted : {}, canEdit && display.muted ? styles.contactMethodValueEditable : {});
+  var actions = method.actions || [];
+  if (editing) {
+    return <div key={method.key} style={cardStyle}>
+        <div style={iconStyle}>{this.renderMiniIcon(method.icon, method.primary ? '#155EEF' : '#475467', 16)}</div>
+        <div style={styles.contactMethodBody}>
+          <div style={styles.contactMethodTitleRow}>
+            <span style={styles.contactMethodLabel}>{method.label}</span>
+            {method.primary && <span style={styles.contactMethodTag}>优先联系</span>}
+          </div>
+          <div style={styles.contactMethodEditWrap}>
+            <input id={this.getContactQuickInputId(method)} type={method.key === 'mobile' ? 'tel' : 'text'} defaultValue={_customState.contactQuickEditDraft || ''} placeholder={'请输入' + method.label} disabled={saving} style={styles.contactMethodInput} onCompositionStart={e => {
+          self._isContactQuickComposing = true;
+        }} onCompositionEnd={e => {
+          self.handleContactQuickDraftCompositionEnd(e);
+        }} onChange={e => {
+          self.handleContactQuickDraftChange(e);
+        }} onKeyDown={e => {
+          if (e.key === 'Enter') {
+            self.saveContactQuickEdit(method);
+          }
+          if (e.key === 'Escape') {
+            self.cancelContactQuickEdit();
+          }
+        }} />
+            <div style={styles.contactMethodEditActions}>
+              <button disabled={saving} style={Object.assign({}, styles.contactMethodSaveButton, saving ? styles.contactMethodButtonDisabled : {})} onClick={e => {
+            self.saveContactQuickEdit(method);
+          }}>{saving ? '保存中' : '保存'}</button>
+              <button disabled={saving} style={Object.assign({}, styles.contactMethodCancelButton, saving ? styles.contactMethodButtonDisabled : {})} onClick={e => {
+            self.cancelContactQuickEdit();
+          }}>取消</button>
+            </div>
+          </div>
+        </div>
+      </div>;
+  }
+  return <div key={method.key} style={cardStyle}>
+      <div style={iconStyle}>{this.renderMiniIcon(method.icon, method.primary ? '#155EEF' : '#475467', 16)}</div>
+      <div style={styles.contactMethodBody}>
+        <div style={styles.contactMethodTitleRow}>
+          <span style={styles.contactMethodLabel}>{method.label}</span>
+          {method.primary && <span style={styles.contactMethodTag}>优先联系</span>}
+        </div>
+        <div style={valueStyle} onClick={e => {
+        if (canEdit && display.muted) self.startContactQuickEdit(method);
+      }}>{display.text}</div>
+      </div>
+      {(canAction || canEdit) && <div style={styles.contactMethodActions}>
+        {canAction && actions.map(action => {
+        var primary = action.type === 'primary';
+        return <button key={action.key} style={Object.assign({}, styles.contactMethodAction, primary ? styles.contactMethodActionPrimary : {})} onClick={e => {
+          if (action.key === 'dial') {
+            self.callContactPhone(method.value);
+          } else {
+            self.copyContactText(method.value);
+          }
+        }}>
+              {self.renderMiniIcon(action.key === 'dial' ? 'phone' : 'copy', primary ? '#155EEF' : '#475467', 12)}
+              <span>{action.label}</span>
+            </button>;
+      })}
+        {canEdit && <button style={styles.contactMethodAction} onClick={e => {
+        self.startContactQuickEdit(method);
+      }}>
+          {self.renderMiniIcon('edit', '#475467', 12)}
+          <span>{display.muted ? '补充' : '修改'}</span>
+        </button>}
+      </div>}
+    </div>;
 }
 export function renderTabHeader(title, actionLabel, onAction, secure) {
   return <div style={styles.tabHeader}>
@@ -1981,6 +2260,46 @@ export function renderProfileHeader(contact, isMobile) {
   var mobile = this.getValue(contact, FIELDS.contact.mobile);
   var workPhone = this.getValue(contact, FIELDS.contact.workPhone);
   var wechat = this.getValue(contact, FIELDS.contact.wechat);
+  var canEditQuick = this.canEditContactQuickly();
+  var contactMethods = [{
+    key: 'mobile',
+    label: '手机号',
+    value: mobile,
+    fieldId: FIELDS.contact.mobile,
+    icon: 'smartphone',
+    primary: true,
+    editable: canEditQuick,
+    actions: [{
+      key: 'dial',
+      label: '拨打',
+      type: 'primary'
+    }, {
+      key: 'copy',
+      label: '复制'
+    }]
+  }, {
+    key: 'workPhone',
+    label: '工作电话',
+    value: workPhone,
+    fieldId: FIELDS.contact.workPhone,
+    icon: 'phone',
+    editable: canEditQuick,
+    actions: [{
+      key: 'copy',
+      label: '复制'
+    }]
+  }, {
+    key: 'wechat',
+    label: '微信号',
+    value: wechat,
+    fieldId: FIELDS.contact.wechat,
+    icon: 'message',
+    editable: canEditQuick,
+    actions: [{
+      key: 'copy',
+      label: '复制'
+    }]
+  }];
   return <div>
       <div style={isMobile ? styles.backRowMobile : styles.backRow}>
         <button style={styles.backLink} onClick={e => {
@@ -2020,19 +2339,8 @@ export function renderProfileHeader(contact, isMobile) {
         })}
           </div>
         </div>
-        <div style={isMobile ? styles.phoneHighlightMobile : styles.phoneHighlight}>
-          <div style={styles.phoneItemPrimary}>
-            <div style={styles.phoneLabel}>手机号</div>
-            <div style={styles.phoneValue}>{mobile}</div>
-          </div>
-          <div style={styles.phoneItem}>
-            <div style={styles.phoneLabel}>工作电话</div>
-            <div style={styles.phoneValue}>{workPhone}</div>
-          </div>
-          <div style={styles.phoneItem}>
-            <div style={styles.phoneLabel}>微信号</div>
-            <div style={styles.phoneValue}>{wechat}</div>
-          </div>
+        <div style={isMobile ? styles.contactMethodGridMobile : styles.contactMethodGrid}>
+          {contactMethods.map(item => this.renderContactMethodCard(item, isMobile))}
         </div>
         <div style={isMobile ? styles.summaryGridMobile : styles.summaryGrid}>
           <div style={styles.summaryCard}>
@@ -2708,67 +3016,210 @@ var styles = {
   summaryGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr 1fr',
-    gap: '16px',
-    marginTop: '20px',
+    gap: '12px',
+    marginTop: '14px',
     alignItems: 'start'
   },
   summaryGridMobile: {
     display: 'grid',
     gap: '10px',
-    marginTop: '16px'
+    marginTop: '12px'
   },
-  phoneHighlight: {
+  contactMethodGrid: {
     display: 'grid',
-    gridTemplateColumns: '1.4fr 1fr 1fr',
+    gridTemplateColumns: '1.35fr 1fr 1fr',
     gap: '12px',
-    marginTop: '18px'
+    marginTop: '14px'
   },
-  phoneHighlightMobile: {
+  contactMethodGridMobile: {
     display: 'grid',
     gap: '10px',
-    marginTop: '16px'
+    marginTop: '12px'
   },
-  phoneItemPrimary: {
-    minHeight: '70px',
-    borderRadius: '8px',
-    border: '1px solid #B9D6FF',
-    background: '#EAF2FF',
-    padding: '12px 14px',
-    boxSizing: 'border-box'
-  },
-  phoneItem: {
-    minHeight: '70px',
+  contactMethodCard: {
+    minHeight: '68px',
     borderRadius: '8px',
     border: '1px solid #EAECF0',
     background: '#FFFFFF',
-    padding: '12px 14px',
+    padding: '10px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    boxShadow: '0 1px 2px rgba(16,24,40,0.03)',
     boxSizing: 'border-box'
   },
-  phoneLabel: {
+  contactMethodCardMobile: {
+    minHeight: '66px',
+    flexWrap: 'wrap'
+  },
+  contactMethodCardPrimary: {
+    borderColor: '#D6E8FF',
+    borderLeft: '4px solid #155EEF'
+  },
+  contactMethodIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: '#F2F4F7',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  contactMethodIconPrimary: {
+    background: '#EAF2FF'
+  },
+  contactMethodBody: {
+    flex: 1,
+    minWidth: 0
+  },
+  contactMethodTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minHeight: '18px',
+    marginBottom: '3px',
+    flexWrap: 'wrap'
+  },
+  contactMethodLabel: {
     color: '#667085',
     fontSize: '12px',
-    lineHeight: '18px',
-    marginBottom: '5px'
+    lineHeight: '18px'
   },
-  phoneValue: {
+  contactMethodTag: {
+    height: '18px',
+    padding: '0 6px',
+    borderRadius: '999px',
+    background: '#EAF2FF',
+    color: '#155EEF',
+    fontSize: '11px',
+    lineHeight: '18px',
+    fontWeight: 700
+  },
+  contactMethodValue: {
     color: '#101828',
-    fontSize: '18px',
-    lineHeight: '26px',
+    fontSize: '15px',
+    lineHeight: '22px',
     fontWeight: 800,
     wordBreak: 'break-word'
   },
+  contactMethodValuePrimary: {
+    color: '#101828',
+    fontSize: '18px',
+    lineHeight: '24px',
+    fontWeight: 800,
+    wordBreak: 'break-word'
+  },
+  contactMethodValueMuted: {
+    color: '#98A2B3',
+    fontWeight: 600
+  },
+  contactMethodValueEditable: {
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    textDecorationStyle: 'dotted',
+    textUnderlineOffset: '3px'
+  },
+  contactMethodActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end'
+  },
+  contactMethodAction: {
+    height: '28px',
+    borderRadius: '6px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#475467',
+    padding: '0 8px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box'
+  },
+  contactMethodActionPrimary: {
+    borderColor: '#B9D6FF',
+    background: '#F5F8FF',
+    color: '#155EEF'
+  },
+  contactMethodEditWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minWidth: 0,
+    flexWrap: 'wrap'
+  },
+  contactMethodInput: {
+    flex: '1 1 130px',
+    minWidth: '120px',
+    height: '30px',
+    borderRadius: '6px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#101828',
+    padding: '0 9px',
+    fontSize: '13px',
+    lineHeight: '18px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  contactMethodEditActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap'
+  },
+  contactMethodSaveButton: {
+    height: '26px',
+    borderRadius: '6px',
+    border: '1px solid #155EEF',
+    background: '#155EEF',
+    color: '#FFFFFF',
+    padding: '0 10px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    boxSizing: 'border-box'
+  },
+  contactMethodCancelButton: {
+    height: '26px',
+    borderRadius: '6px',
+    border: '1px solid #D0D5DD',
+    background: '#FFFFFF',
+    color: '#475467',
+    padding: '0 10px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    boxSizing: 'border-box'
+  },
+  contactMethodButtonDisabled: {
+    opacity: 0.62,
+    cursor: 'not-allowed'
+  },
   summaryCard: {
-    minHeight: '80px',
+    minHeight: '72px',
     borderRadius: '8px',
-    background: '#F8FAFC',
+    border: '1px solid #EAECF0',
+    background: '#FFFFFF',
     padding: '12px',
+    boxShadow: '0 1px 2px rgba(16,24,40,0.03)',
     boxSizing: 'border-box'
   },
   summaryCardCompact: {
     minHeight: '44px',
     borderRadius: '8px',
-    background: '#F8FAFC',
+    border: '1px solid #EAECF0',
+    background: '#FFFFFF',
     padding: '10px 12px',
+    boxShadow: '0 1px 2px rgba(16,24,40,0.03)',
     boxSizing: 'border-box'
   },
   summarySideStack: {
