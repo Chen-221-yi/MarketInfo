@@ -29,6 +29,8 @@ var FIELDS = {
     type: 'selectField_ibw56nd6d',
     status: 'selectField_ibw57natj',
     stage: 'selectField_ibw58zzom',
+    smoking: 'radioField_smokeinccd',
+    drinking: 'radioField_drinkinccd',
     unit: 'associationFormField_ibw594k2s',
     department: 'textField_ibw5a32dk',
     position: 'textField_ibw5bqqub',
@@ -110,8 +112,6 @@ var FIELDS = {
     foodPreference: 'textField_mdimrcpk3',
     taboo: 'textField_mdims2sm9',
     interestNote: 'textareaField_mdimtkz0v',
-    smoking: 'radioField_mdimueivy',
-    drinking: 'radioField_mdimvogfq',
     officeHabit: 'textareaField_mdimwvn6f',
     vehicle: 'textareaField_mdimx5d1j',
     habitNote: 'textareaField_mdimyyya5',
@@ -274,7 +274,11 @@ export function setCustomState(newState) {
 export function didUnmount() {}
 export function getLoginRoleTexts() {
   var values = [];
-  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  var user = null;
+  try {
+    if (this.utils && this.utils.getLoginUser) user = this.utils.getLoginUser();
+  } catch (e) {}
+  if (!user && typeof window !== 'undefined') user = window.loginUser || window._loginUser || {};
   function collect(value) {
     if (!value) return;
     if (typeof value === 'string') {
@@ -287,13 +291,17 @@ export function getLoginRoleTexts() {
     }
     if (typeof value === 'object') {
       collect(value.name);
+      collect(value.label);
+      collect(value.text);
       collect(value.title);
       collect(value.roleName);
       collect(value.roleNames);
+      collect(value.roleTitle);
       collect(value.groupName);
       collect(value.groupNames);
     }
   }
+  collect(user);
   collect(user.roleName);
   collect(user.roleNames);
   collect(user.roles);
@@ -307,7 +315,8 @@ export function getLoginRoleTexts() {
 }
 export function isNormalEmployeeRole() {
   var roleText = this.getLoginRoleTexts();
-  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+  var isElevated = roleText.indexOf('总经办') >= 0 || roleText.indexOf('总经理办') >= 0 || roleText.indexOf('高层') >= 0 || roleText.indexOf('管理层') >= 0 || roleText.indexOf('部门经理') >= 0;
+  return !isElevated && (roleText.indexOf('普通员工') >= 0 || roleText.indexOf('普通成员') >= 0);
 }
 export function denyNormalEmployeeAccess() {
   if (!this.isNormalEmployeeRole()) return false;
@@ -754,7 +763,7 @@ export function getCompletenessResult(contact) {
     label: '姓名',
     fieldId: FIELDS.contact.name
   }, {
-    label: '客户星级',
+    label: '客户职务',
     fieldId: FIELDS.contact.star
   }, {
     label: '客户类型',
@@ -762,9 +771,6 @@ export function getCompletenessResult(contact) {
   }, {
     label: '客户状态',
     fieldId: FIELDS.contact.status
-  }, {
-    label: '所属地区',
-    fieldId: FIELDS.contact.region
   }, {
     label: '出生日期',
     fieldId: FIELDS.contact.birthDate
@@ -1972,6 +1978,9 @@ export function renderProfileHeader(contact, isMobile) {
   var complete = this.getCompletion(contact);
   var ageText = this.calculateAge(this.rawValue(contact, FIELDS.contact.birthDate));
   var visitStyle = this.getVisitStatusStyle(visitStatus);
+  var mobile = this.getValue(contact, FIELDS.contact.mobile);
+  var workPhone = this.getValue(contact, FIELDS.contact.workPhone);
+  var wechat = this.getValue(contact, FIELDS.contact.wechat);
   return <div>
       <div style={isMobile ? styles.backRowMobile : styles.backRow}>
         <button style={styles.backLink} onClick={e => {
@@ -2009,6 +2018,20 @@ export function renderProfileHeader(contact, isMobile) {
             {this.renderButton('编辑', 'default', e => {
           this.editContact();
         })}
+          </div>
+        </div>
+        <div style={isMobile ? styles.phoneHighlightMobile : styles.phoneHighlight}>
+          <div style={styles.phoneItemPrimary}>
+            <div style={styles.phoneLabel}>手机号</div>
+            <div style={styles.phoneValue}>{mobile}</div>
+          </div>
+          <div style={styles.phoneItem}>
+            <div style={styles.phoneLabel}>工作电话</div>
+            <div style={styles.phoneValue}>{workPhone}</div>
+          </div>
+          <div style={styles.phoneItem}>
+            <div style={styles.phoneLabel}>微信号</div>
+            <div style={styles.phoneValue}>{wechat}</div>
           </div>
         </div>
         <div style={isMobile ? styles.summaryGridMobile : styles.summaryGrid}>
@@ -2067,7 +2090,7 @@ export function renderBasicTab(contact, isMobile) {
         {this.renderInfoRow('出生日期', this.formatDate(this.rawValue(contact, FIELDS.contact.birthDate)))}
         {this.renderInfoRow('年龄', this.calculateAge(this.rawValue(contact, FIELDS.contact.birthDate)))}
         {this.renderInfoRow('客户类型', this.getValue(contact, FIELDS.contact.type))}
-        {this.renderInfoRow('所属地区', this.getValue(contact, FIELDS.contact.region), true)}
+        {this.renderInfoRow('办公地点', this.getValue(contact, FIELDS.contact.office), true)}
       </div>);
   var positionSection = this.renderSection('当前岗位', 'briefcase', <div>
         {this.renderInfoRow('当前单位', this.getUnitName(contact))}
@@ -2076,11 +2099,9 @@ export function renderBasicTab(contact, isMobile) {
         {this.renderInfoRow('职级', this.getValue(contact, FIELDS.contact.level))}
         {this.renderInfoRow('分管业务', this.getValue(contact, FIELDS.contact.business), true)}
       </div>);
-  var contactSection = this.renderSection('联系方式', 'phone', <div>
-        {this.renderInfoRow('工作电话', this.getValue(contact, FIELDS.contact.workPhone))}
-        {this.renderInfoRow('手机号', this.getValue(contact, FIELDS.contact.mobile))}
-        {this.renderInfoRow('微信号', this.getValue(contact, FIELDS.contact.wechat))}
-        {this.renderInfoRow('办公地点', this.getValue(contact, FIELDS.contact.office), true)}
+  var contactSection = this.renderSection('办公习惯', 'briefcase', <div>
+        {this.renderInfoRow('是否抽烟', this.getValue(contact, FIELDS.contact.smoking))}
+        {this.renderInfoRow('是否喝酒', this.getValue(contact, FIELDS.contact.drinking), true)}
       </div>);
   var visitSection = this.renderSection('拜访状态', 'clock', <div>
         {this.renderInfoRow('最近拜访', this.formatDate(this.rawValue(contact, FIELDS.contact.lastVisit)))}
@@ -2347,12 +2368,6 @@ export function renderProfileTab(contact) {
     wide: true
   }];
   var habitFields = [{
-    label: '是否抽烟',
-    fieldId: FIELDS.privateProfile.smoking
-  }, {
-    label: '是否喝酒',
-    fieldId: FIELDS.privateProfile.drinking
-  }, {
     label: '办公习惯',
     fieldId: FIELDS.privateProfile.officeHabit
   }, {
@@ -2701,6 +2716,46 @@ var styles = {
     display: 'grid',
     gap: '10px',
     marginTop: '16px'
+  },
+  phoneHighlight: {
+    display: 'grid',
+    gridTemplateColumns: '1.4fr 1fr 1fr',
+    gap: '12px',
+    marginTop: '18px'
+  },
+  phoneHighlightMobile: {
+    display: 'grid',
+    gap: '10px',
+    marginTop: '16px'
+  },
+  phoneItemPrimary: {
+    minHeight: '70px',
+    borderRadius: '8px',
+    border: '1px solid #B9D6FF',
+    background: '#EAF2FF',
+    padding: '12px 14px',
+    boxSizing: 'border-box'
+  },
+  phoneItem: {
+    minHeight: '70px',
+    borderRadius: '8px',
+    border: '1px solid #EAECF0',
+    background: '#FFFFFF',
+    padding: '12px 14px',
+    boxSizing: 'border-box'
+  },
+  phoneLabel: {
+    color: '#667085',
+    fontSize: '12px',
+    lineHeight: '18px',
+    marginBottom: '5px'
+  },
+  phoneValue: {
+    color: '#101828',
+    fontSize: '18px',
+    lineHeight: '26px',
+    fontWeight: 800,
+    wordBreak: 'break-word'
   },
   summaryCard: {
     minHeight: '80px',

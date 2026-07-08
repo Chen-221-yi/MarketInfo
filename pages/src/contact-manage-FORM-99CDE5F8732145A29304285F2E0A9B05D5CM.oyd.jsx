@@ -6,6 +6,7 @@ var FORMS = {
   page: 'FORM-99CDE5F8732145A29304285F2E0A9B05D5CM',
   contactManage: 'FORM-99CDE5F8732145A29304285F2E0A9B05D5CM',
   contactDetail: 'FORM-89CA116EA0134CACB77EAA0F87AA7AB8MD1C',
+  normalContactDetail: 'FORM-9F0773918F94420693798B9C2BDED0A8EZ4F',
   visitManage: 'FORM-02C2269B84C44EFFB83ECF629F05AB94I339',
   projectManage: 'FORM-CAC6AFFA0A3341B598561F68EE7B4B8BTZGB',
   unitManage: 'FORM-CA9908793C7C4EA3997B43B5BF5FAA34KEAC',
@@ -114,7 +115,7 @@ var _customState = {
   keyword: '',
   showFilters: false,
   visitFilter: '全部',
-  statusFilter: '全部',
+  statusFilter: '有效',
   starFilter: '全部',
   tagFilter: '全部',
   incompleteOnly: false,
@@ -153,7 +154,11 @@ export function forceUpdate() {
 }
 export function getLoginRoleTexts() {
   var values = [];
-  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  var user = null;
+  try {
+    if (this.utils && this.utils.getLoginUser) user = this.utils.getLoginUser();
+  } catch (e) {}
+  if (!user && typeof window !== 'undefined') user = window.loginUser || window._loginUser || {};
   function collect(value) {
     if (!value) return;
     if (typeof value === 'string') {
@@ -166,13 +171,17 @@ export function getLoginRoleTexts() {
     }
     if (typeof value === 'object') {
       collect(value.name);
+      collect(value.label);
+      collect(value.text);
       collect(value.title);
       collect(value.roleName);
       collect(value.roleNames);
+      collect(value.roleTitle);
       collect(value.groupName);
       collect(value.groupNames);
     }
   }
+  collect(user);
   collect(user.roleName);
   collect(user.roleNames);
   collect(user.roles);
@@ -186,15 +195,8 @@ export function getLoginRoleTexts() {
 }
 export function isNormalEmployeeRole() {
   var roleText = this.getLoginRoleTexts();
-  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
-}
-export function denyNormalEmployeeAccess() {
-  if (!this.isNormalEmployeeRole()) return false;
-  _customState.accessDenied = true;
-  _customState.loading = false;
-  _customState.error = '';
-  this.forceUpdate();
-  return true;
+  var isElevated = roleText.indexOf('总经办') >= 0 || roleText.indexOf('总经理办') >= 0 || roleText.indexOf('高层') >= 0 || roleText.indexOf('管理层') >= 0 || roleText.indexOf('部门经理') >= 0;
+  return !isElevated && (roleText.indexOf('普通员工') >= 0 || roleText.indexOf('普通成员') >= 0);
 }
 export function renderAccessDenied() {
   return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
@@ -227,7 +229,7 @@ export function applyRouteParams() {
 }
 export function didMount() {
   var self = this;
-  if (this.denyNormalEmployeeAccess()) return;
+  _customState.accessDenied = false;
   this.applyRouteParams();
   this.loadData(true);
   _customState.refreshTimer = setInterval(() => {
@@ -508,7 +510,7 @@ export function getCompletenessResult(contact) {
     label: '姓名',
     fieldId: FIELDS.contact.name
   }, {
-    label: '客户星级',
+    label: '客户职务',
     fieldId: FIELDS.contact.star
   }, {
     label: '客户类型',
@@ -516,9 +518,6 @@ export function getCompletenessResult(contact) {
   }, {
     label: '客户状态',
     fieldId: FIELDS.contact.status
-  }, {
-    label: '所属地区',
-    fieldId: FIELDS.contact.region
   }, {
     label: '出生日期',
     fieldId: FIELDS.contact.birthDate
@@ -603,7 +602,7 @@ export function getInitial(name) {
 }
 export function statusTone(text) {
   if (text === '已超期' || text === '高敏' || text === '失联') return 'danger';
-  if (text === '即将超期' || text === '待维护' || text === '需维护') return 'warning';
+  if (text === '即将超期' || text === '待维护' || text === '需维护' || text === '长期未联系') return 'warning';
   if (text === '活跃' || text === '未超期' || text === '公开') return 'success';
   if (text === '重点决策人' || text === '关键关系' || text === '授权') return 'primary';
   return 'default';
@@ -639,7 +638,7 @@ export function getFilteredContacts() {
     var normalizedTags = self.getContactTags(item);
     var keywordMatch = !keyword || name.indexOf(keyword) >= 0 || alias.indexOf(keyword) >= 0 || unit.indexOf(keyword) >= 0 || position.indexOf(keyword) >= 0 || region.indexOf(keyword) >= 0 || tags.indexOf(keyword) >= 0 || owner.indexOf(keyword) >= 0;
     var visitMatch = _customState.visitFilter === '全部' || _customState.visitFilter === '拜访风险' && (visitStatus === '已超期' || visitStatus === '即将超期') || visitStatus === _customState.visitFilter;
-    var statusMatch = _customState.statusFilter === '全部' || status === _customState.statusFilter;
+    var statusMatch = _customState.statusFilter === '全部' || _customState.statusFilter === '有效' && ['活跃', '待维护', '长期未联系'].indexOf(status) >= 0 || status === _customState.statusFilter;
     var starMatch = _customState.starFilter === '全部' || star === _customState.starFilter;
     var tagMatch = _customState.tagFilter === '全部' || normalizedTags.indexOf(_customState.tagFilter) >= 0;
     var incompleteMatch = !_customState.incompleteOnly || self.getCompletion(item) < 80;
@@ -648,7 +647,7 @@ export function getFilteredContacts() {
   return this.sortContacts(list);
 }
 export function hasActiveFilters() {
-  return _customState.visitFilter !== '全部' || _customState.statusFilter !== '全部' || _customState.starFilter !== '全部' || _customState.tagFilter !== '全部' || _customState.incompleteOnly;
+  return _customState.visitFilter !== '全部' || _customState.statusFilter !== '有效' || _customState.starFilter !== '全部' || _customState.tagFilter !== '全部' || _customState.incompleteOnly;
 }
 export function getAllTags() {
   var all = [];
@@ -768,7 +767,7 @@ export function setStatusFilter(e) {
   this.applyFilters();
 }
 export function setStatusFilterValue(value) {
-  _customState.statusFilter = _customState.statusFilter === value ? '全部' : value;
+  _customState.statusFilter = _customState.statusFilter === value ? '有效' : value;
   this.applyFilters();
 }
 export function setStarFilter(e) {
@@ -796,7 +795,7 @@ export function toggleSortMenu() {
 export function resetFilters() {
   _customState.keyword = '';
   _customState.visitFilter = '全部';
-  _customState.statusFilter = '全部';
+  _customState.statusFilter = '有效';
   _customState.starFilter = '全部';
   _customState.tagFilter = '全部';
   _customState.incompleteOnly = false;
@@ -848,7 +847,16 @@ export function openDetail(formUuid, formInstId) {
 }
 export function openContactDetail(formInstId) {
   if (!formInstId) return;
-  this.utils.router.push(FORMS.contactDetail, {
+  var contact = this.findById(_customState.contacts, formInstId);
+  var star = contact ? parseInt(this.getValue(contact, FIELDS.contact.star), 10) || 0 : 0;
+  if (this.isNormalEmployeeRole() && star >= 4) {
+    this.utils.toast({
+      title: '四星/五星联系人详情仅管理层可查看',
+      type: 'warning'
+    });
+    return;
+  }
+  this.utils.router.push(this.isNormalEmployeeRole() ? FORMS.normalContactDetail : FORMS.contactDetail, {
     contactId: formInstId
   }, false);
 }
@@ -908,7 +916,7 @@ export function renderButton(label, type, onClick) {
 export function getSortOptions() {
   return [{
     value: 'star',
-    label: '按星级排序'
+    label: '按客户职务排序'
   }, {
     value: 'recent',
     label: '按最近拜访'
@@ -1048,7 +1056,7 @@ export function renderHero(isMobile) {
 }
 export function renderFilterBar(isMobile) {
   var self = this;
-  var statusOptions = ['活跃', '待维护', '暂缓', '失联', '离退休'];
+  var statusOptions = ['有效', '全部', '活跃', '待维护', '长期未联系', '暂缓', '失联', '离退休', '无效'];
   var starOptions = ['5星', '4星', '3星', '2星', '1星'];
   var tagOptions = this.getAllTags();
   var hasFilters = this.hasActiveFilters();
@@ -1099,7 +1107,7 @@ export function renderFilterBar(isMobile) {
             </div>
           </div>
           <div style={styles.filterGroup}>
-            <span style={styles.filterLabel}>星级:</span>
+            <span style={styles.filterLabel}>客户职务:</span>
             <div style={styles.segmentWrap}>
               {starOptions.map(item => <button key={item} onMouseDown={e => {
             self.preventButtonFocus(e);
@@ -1225,7 +1233,7 @@ export function renderTable(isMobile) {
             })}>单位/岗位</th>
                 <th style={Object.assign({}, styles.th, {
               width: '9%'
-            })}>星级</th>
+            })}>客户职务</th>
                 <th style={Object.assign({}, styles.th, {
               width: '8%'
             })}>状态</th>

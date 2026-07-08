@@ -126,7 +126,11 @@ export function didMount() {
 export function didUnmount() {}
 export function getLoginRoleTexts() {
   var values = [];
-  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  var user = null;
+  try {
+    if (this.utils && this.utils.getLoginUser) user = this.utils.getLoginUser();
+  } catch (e) {}
+  if (!user && typeof window !== 'undefined') user = window.loginUser || window._loginUser || {};
   function collect(value) {
     if (!value) return;
     if (typeof value === 'string') {
@@ -139,13 +143,17 @@ export function getLoginRoleTexts() {
     }
     if (typeof value === 'object') {
       collect(value.name);
+      collect(value.label);
+      collect(value.text);
       collect(value.title);
       collect(value.roleName);
       collect(value.roleNames);
+      collect(value.roleTitle);
       collect(value.groupName);
       collect(value.groupNames);
     }
   }
+  collect(user);
   collect(user.roleName);
   collect(user.roleNames);
   collect(user.roles);
@@ -159,7 +167,8 @@ export function getLoginRoleTexts() {
 }
 export function isNormalEmployeeRole() {
   var roleText = this.getLoginRoleTexts();
-  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+  var isElevated = roleText.indexOf('总经办') >= 0 || roleText.indexOf('总经理办') >= 0 || roleText.indexOf('高层') >= 0 || roleText.indexOf('管理层') >= 0 || roleText.indexOf('部门经理') >= 0;
+  return !isElevated && (roleText.indexOf('普通员工') >= 0 || roleText.indexOf('普通成员') >= 0);
 }
 export function denyNormalEmployeeAccess() {
   if (!this.isNormalEmployeeRole()) return false;
@@ -172,7 +181,7 @@ export function denyNormalEmployeeAccess() {
 export function renderAccessDenied() {
   return <div style={styles.accessBox}>
       <div style={styles.accessTitle}>暂无查看权限</div>
-      <div style={styles.accessText}>市场线索管理页仅开放给“市场信息管理 / 总经理办”。普通员工请继续使用原生表单提交拜访和线索。</div>
+      <div style={styles.accessText}>市场线索管理页仅开放给高层和管理层。普通员工可在首页查看与自己相关的线索，并继续使用原生表单提交拜访和线索。</div>
     </div>;
 }
 export function loadData(showLoading) {

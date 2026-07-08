@@ -90,7 +90,11 @@ export function didUnmount() {}
 
 export function getLoginRoleTexts() {
   var values = [];
-  var user = typeof window !== 'undefined' && window.loginUser ? window.loginUser : {};
+  var user = null;
+  try {
+    if (this.utils && this.utils.getLoginUser) user = this.utils.getLoginUser();
+  } catch (e) {}
+  if (!user && typeof window !== 'undefined') user = window.loginUser || window._loginUser || {};
   function collect(value) {
     if (!value) return;
     if (typeof value === 'string') {
@@ -103,13 +107,17 @@ export function getLoginRoleTexts() {
     }
     if (typeof value === 'object') {
       collect(value.name);
+      collect(value.label);
+      collect(value.text);
       collect(value.title);
       collect(value.roleName);
       collect(value.roleNames);
+      collect(value.roleTitle);
       collect(value.groupName);
       collect(value.groupNames);
     }
   }
+  collect(user);
   collect(user.roleName);
   collect(user.roleNames);
   collect(user.roles);
@@ -122,13 +130,13 @@ export function getLoginRoleTexts() {
   return values.join(' ');
 }
 
-export function isNormalEmployeeRole() {
+export function isHighLevelRole() {
   var roleText = this.getLoginRoleTexts();
-  return roleText.indexOf('普通员工') >= 0 && roleText.indexOf('总经理办') < 0;
+  return roleText.indexOf('总经办') >= 0 || roleText.indexOf('总经理办') >= 0 || roleText.indexOf('高层') >= 0;
 }
 
 export function denyNormalEmployeeAccess() {
-  if (!this.isNormalEmployeeRole()) return false;
+  if (this.isHighLevelRole()) return false;
   _customState.accessDenied = true;
   _customState.scanning = false;
   _customState.running = false;
@@ -139,7 +147,7 @@ export function denyNormalEmployeeAccess() {
 export function renderAccessDenied() {
   return <div style={{ maxWidth: '680px', margin: '80px auto', padding: '32px 24px', background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '8px', textAlign: 'center' }}>
       <div style={{ fontSize: '20px', fontWeight: 750, color: '#1D2939', marginBottom: '8px' }}>暂无查看权限</div>
-      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>数据清空维护仅开放给“市场信息管理 / 总经理办”。</div>
+      <div style={{ fontSize: '14px', color: '#667085', lineHeight: '22px' }}>数据清空维护仅开放给高层角色。</div>
     </div>;
 }
 
@@ -231,6 +239,13 @@ export function handleConfirmChange(e) {
 
 export function startClearData() {
   var total = this.getTotalCount();
+  if (!this.isHighLevelRole()) {
+    this.utils.toast({
+      title: '仅高层角色可清空业务数据',
+      type: 'warning'
+    });
+    return;
+  }
   if (_customState.scanning) {
     this.utils.toast({
       title: '正在统计数据，请稍候',

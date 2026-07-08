@@ -29,6 +29,8 @@ var FIELDS = {
     type: 'selectField_ibw56nd6d',
     status: 'selectField_ibw57natj',
     stage: 'selectField_ibw58zzom',
+    smoking: 'radioField_smokeinccd',
+    drinking: 'radioField_drinkinccd',
     unit: 'associationFormField_ibw594k2s',
     department: 'textField_ibw5a32dk',
     position: 'textField_ibw5bqqub',
@@ -110,8 +112,6 @@ var FIELDS = {
     foodPreference: 'textField_mdimrcpk3',
     taboo: 'textField_mdims2sm9',
     interestNote: 'textareaField_mdimtkz0v',
-    smoking: 'radioField_mdimueivy',
-    drinking: 'radioField_mdimvogfq',
     officeHabit: 'textareaField_mdimwvn6f',
     vehicle: 'textareaField_mdimx5d1j',
     habitNote: 'textareaField_mdimyyya5',
@@ -222,6 +222,7 @@ var TAB_ITEMS = [{
 var _customState = {
   loading: true,
   error: '',
+  accessDenied: false,
   contactId: '',
   activeTab: 'basic',
   contacts: [],
@@ -279,11 +280,14 @@ export function loadData() {
   var self = this;
   _customState.loading = true;
   _customState.error = '';
+  _customState.accessDenied = false;
   this.forceUpdate();
   Promise.all([self.loadForm(FORMS.contact, 'contacts'), self.loadForm(FORMS.unit, 'units')]).then(() => {
     if (!_customState.contactId && _customState.contacts.length) {
       _customState.contactId = self.getRowId(_customState.contacts[0]);
     }
+    var contact = self.findById(_customState.contacts, _customState.contactId);
+    _customState.accessDenied = !!(contact && self.getStarNumber(contact) >= 4);
     _customState.loading = false;
     _customState.error = '';
     self.forceUpdate();
@@ -701,7 +705,7 @@ export function getCompletenessResult(contact) {
     label: '姓名',
     fieldId: FIELDS.contact.name
   }, {
-    label: '客户星级',
+    label: '客户职务',
     fieldId: FIELDS.contact.star
   }, {
     label: '客户类型',
@@ -709,9 +713,6 @@ export function getCompletenessResult(contact) {
   }, {
     label: '客户状态',
     fieldId: FIELDS.contact.status
-  }, {
-    label: '所属地区',
-    fieldId: FIELDS.contact.region
   }, {
     label: '出生日期',
     fieldId: FIELDS.contact.birthDate
@@ -1880,6 +1881,12 @@ export function renderSection(title, icon, children, wide) {
 export function renderEmpty(text) {
   return <div style={styles.empty}>{text}</div>;
 }
+export function renderAccessDenied() {
+  return <div style={styles.accessDenied}>
+      <div style={styles.accessDeniedTitle}>暂无查看权限</div>
+      <div style={styles.accessDeniedText}>四星/五星联系人详情仅管理层可查看。你仍可在联系人列表查看基础摘要。</div>
+    </div>;
+}
 export function renderOwnerContribution(contact) {
   var data = this.getMaintenanceContributions(contact);
   var top = data.list[0];
@@ -2010,7 +2017,7 @@ export function renderBasicTab(contact, isMobile) {
         {this.renderInfoRow('出生日期', this.formatDate(this.rawValue(contact, FIELDS.contact.birthDate)))}
         {this.renderInfoRow('年龄', this.calculateAge(this.rawValue(contact, FIELDS.contact.birthDate)))}
         {this.renderInfoRow('客户类型', this.getValue(contact, FIELDS.contact.type))}
-        {this.renderInfoRow('所属地区', this.getValue(contact, FIELDS.contact.region), true)}
+        {this.renderInfoRow('办公地点', this.getValue(contact, FIELDS.contact.office), true)}
       </div>);
   var positionSection = this.renderSection('当前岗位', 'briefcase', <div>
         {this.renderInfoRow('当前单位', this.getUnitName(contact))}
@@ -2019,11 +2026,9 @@ export function renderBasicTab(contact, isMobile) {
         {this.renderInfoRow('职级', this.getValue(contact, FIELDS.contact.level))}
         {this.renderInfoRow('分管业务', this.getValue(contact, FIELDS.contact.business), true)}
       </div>);
-  var contactSection = this.renderSection('联系方式', 'phone', <div>
-        {this.renderInfoRow('工作电话', this.getValue(contact, FIELDS.contact.workPhone))}
-        {this.renderInfoRow('手机号', this.getValue(contact, FIELDS.contact.mobile))}
-        {this.renderInfoRow('微信号', this.getValue(contact, FIELDS.contact.wechat))}
-        {this.renderInfoRow('办公地点', this.getValue(contact, FIELDS.contact.office), true)}
+  var contactSection = this.renderSection('办公习惯', 'briefcase', <div>
+        {this.renderInfoRow('是否抽烟', this.getValue(contact, FIELDS.contact.smoking))}
+        {this.renderInfoRow('是否喝酒', this.getValue(contact, FIELDS.contact.drinking), true)}
       </div>);
   var visitSection = this.renderSection('拜访状态', 'clock', <div>
         {this.renderInfoRow('最近拜访', this.formatDate(this.rawValue(contact, FIELDS.contact.lastVisit)))}
@@ -2290,12 +2295,6 @@ export function renderProfileTab(contact) {
     wide: true
   }];
   var habitFields = [{
-    label: '是否抽烟',
-    fieldId: FIELDS.privateProfile.smoking
-  }, {
-    label: '是否喝酒',
-    fieldId: FIELDS.privateProfile.drinking
-  }, {
     label: '办公习惯',
     fieldId: FIELDS.privateProfile.officeHabit
   }, {
@@ -4069,6 +4068,36 @@ var styles = {
     background: '#FEF3F2',
     color: '#B42318',
     border: '1px solid #FECDCA'
+  },
+  sensitiveNotice: {
+    padding: '14px',
+    borderRadius: '8px',
+    background: '#F8FAFC',
+    color: '#667085',
+    fontSize: '14px',
+    lineHeight: '22px',
+    border: '1px solid #E4E7EC'
+  },
+  accessDenied: {
+    maxWidth: '680px',
+    margin: '80px auto',
+    padding: '32px 24px',
+    background: '#FFFFFF',
+    border: '1px solid #EAECF0',
+    borderRadius: '8px',
+    textAlign: 'center',
+    boxSizing: 'border-box'
+  },
+  accessDeniedTitle: {
+    fontSize: '20px',
+    fontWeight: 750,
+    color: '#1D2939',
+    marginBottom: '8px'
+  },
+  accessDeniedText: {
+    fontSize: '14px',
+    color: '#667085',
+    lineHeight: '22px'
   }
 };
 export function renderJsx() {
@@ -4082,8 +4111,9 @@ export function renderJsx() {
       <div style={isMobile ? styles.shellMobile : styles.shell}>
         {_customState.loading && <div style={styles.notice}>正在加载联系人详情...</div>}
         {_customState.error && <div style={styles.error}>{_customState.error}</div>}
-        {!_customState.loading && !contact && this.renderEmpty('未找到联系人，请返回列表重新选择')}
-        {!_customState.loading && contact && <div>
+        {!_customState.loading && _customState.accessDenied && this.renderAccessDenied()}
+        {!_customState.loading && !_customState.accessDenied && !contact && this.renderEmpty('未找到联系人，请返回列表重新选择')}
+        {!_customState.loading && !_customState.accessDenied && contact && <div>
           {this.renderProfileHeader(contact, isMobile)}
           <div style={styles.detailPanel}>
             {this.renderTabs()}

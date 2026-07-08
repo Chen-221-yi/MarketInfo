@@ -5,6 +5,7 @@ var BASE_URL = 'https://aplttv.aliwork.com';
 var FORMS = {
   contactManage: 'FORM-99CDE5F8732145A29304285F2E0A9B05D5CM',
   contactDetail: 'FORM-89CA116EA0134CACB77EAA0F87AA7AB8MD1C',
+  normalContactDetail: 'FORM-9F0773918F94420693798B9C2BDED0A8EZ4F',
   visitManage: 'FORM-02C2269B84C44EFFB83ECF629F05AB94I339',
   visitDetail: 'FORM-6CC5A6BBE39F439CA213B8CC3BD7E429GQW1',
   leadManage: 'FORM-4E927F6C9D1E43EC8226DDB561F31FAC4OF7',
@@ -380,6 +381,13 @@ export function loadForm(formUuid, stateKey, pageSize, orderField, direction) {
   });
 }
 export function openMaintenancePanel() {
+  if (!this.isHighLevelRole()) {
+    this.utils.toast({
+      title: '仅高层角色可进入系统维护',
+      type: 'warning'
+    });
+    return;
+  }
   _customState.maintenanceOpen = true;
   _customState.clearConfirmText = '';
   _customState.clearDataResult = null;
@@ -845,7 +853,7 @@ export function getCompletenessResult(contact) {
     label: '姓名',
     fieldId: FIELDS.contact.name
   }, {
-    label: '客户星级',
+    label: '客户职务',
     fieldId: FIELDS.contact.star
   }, {
     label: '客户类型',
@@ -853,9 +861,6 @@ export function getCompletenessResult(contact) {
   }, {
     label: '客户状态',
     fieldId: FIELDS.contact.status
-  }, {
-    label: '所属地区',
-    fieldId: FIELDS.contact.region
   }, {
     label: '出生日期',
     fieldId: FIELDS.contact.birthDate
@@ -1421,6 +1426,64 @@ export function getLoginUserName() {
   name = name ? String(name).trim() : '';
   return name || '当前用户';
 }
+export function getLoginRoleTexts() {
+  var values = [];
+  var user = null;
+  try {
+    if (this.utils && this.utils.getLoginUser) user = this.utils.getLoginUser();
+  } catch (e) {}
+  if (!user && typeof window !== 'undefined') user = window.loginUser || window._loginUser || {};
+  function collect(value) {
+    if (!value) return;
+    if (typeof value === 'string') {
+      values.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(item => collect(item));
+      return;
+    }
+    if (typeof value === 'object') {
+      collect(value.name);
+      collect(value.label);
+      collect(value.text);
+      collect(value.title);
+      collect(value.roleName);
+      collect(value.roleNames);
+      collect(value.roleTitle);
+      collect(value.groupName);
+      collect(value.groupNames);
+    }
+  }
+  collect(user);
+  collect(user.roleName);
+  collect(user.roleNames);
+  collect(user.roles);
+  collect(user.roleList);
+  collect(user.roleGroups);
+  collect(user.groupName);
+  collect(user.groupNames);
+  collect(user.groups);
+  collect(user.ext);
+  return values.join(' ');
+}
+export function isHighLevelRole() {
+  var roleText = this.getLoginRoleTexts();
+  return roleText.indexOf('总经办') >= 0 || roleText.indexOf('总经理办') >= 0 || roleText.indexOf('高层') >= 0;
+}
+export function isManagerRole() {
+  var roleText = this.getLoginRoleTexts();
+  return this.isHighLevelRole() || roleText.indexOf('管理层') >= 0 || roleText.indexOf('部门经理') >= 0;
+}
+export function isNormalEmployeeRole() {
+  var roleText = this.getLoginRoleTexts();
+  return !this.isManagerRole() && (roleText.indexOf('普通员工') >= 0 || roleText.indexOf('普通成员') >= 0);
+}
+export function getStarNumber(contact) {
+  var text = this.getValue(contact, FIELDS.contact.star);
+  var match = String(text || '').match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
 export function getHomeUpdatesStorageKey() {
   return 'home_updates_last_read_' + (this.getLoginUserId() || 'default');
 }
@@ -1598,11 +1661,27 @@ export function openContactList(filter) {
 export function openContactDetail(contact) {
   var id = this.getRowId(contact);
   if (!id) return;
-  this.openFormWithParams(FORMS.contactDetail, {
+  if (this.isNormalEmployeeRole() && this.getStarNumber(contact) >= 4) {
+    this.utils.toast({
+      title: '四星/五星联系人详情仅管理层可查看',
+      type: 'warning'
+    });
+    return;
+  }
+  this.openFormWithParams(this.isNormalEmployeeRole() ? FORMS.normalContactDetail : FORMS.contactDetail, {
     contactId: id
   }, false);
 }
 export function openMarketLeadList() {
+  if (this.isNormalEmployeeRole()) {
+    _customState.activeWorkTab = 'follow';
+    this.utils.toast({
+      title: '普通员工仅查看与我相关线索',
+      type: 'notice'
+    });
+    this.forceUpdate();
+    return;
+  }
   this.openFormWithParams(FORMS.leadManage, {}, false);
 }
 export function openLeadDetail(row) {
@@ -1853,6 +1932,9 @@ export function renderNav(isMobile) {
     label: '系统配置',
     action: 'admin'
   }];
+  if (!this.isHighLevelRole()) {
+    items = items.filter(item => item.action !== 'admin');
+  }
   return <div style={isMobile ? styles.mobileNav : styles.sidebar}>
       {!isMobile && <div style={styles.brand}>
           <div style={styles.brandMark}>MI</div>
@@ -1884,7 +1966,16 @@ export function handleNav(action) {
   if (action === 'project') this.openNativeForm(FORMS.projectManage);
   if (action === 'unit') this.openNativeForm(FORMS.unitManage);
   if (action === 'reminder') this.openNativeForm(FORMS.reminder);
-  if (action === 'admin') this.openUrl(BASE_URL + '/' + APP_TYPE + '/admin');
+  if (action === 'admin') {
+    if (!this.isHighLevelRole()) {
+      this.utils.toast({
+        title: '仅高层角色可进入系统配置',
+        type: 'warning'
+      });
+      return;
+    }
+    this.openUrl(BASE_URL + '/' + APP_TYPE + '/admin');
+  }
 }
 export function renderTopbar(isMobile) {
   return <div style={isMobile ? styles.topbarMobile : styles.topbar}>
@@ -1974,6 +2065,9 @@ export function renderMetrics(gridStyle) {
     icon: 'users',
     action: 'visits'
   }];
+  if (this.isNormalEmployeeRole()) {
+    cards = cards.filter(card => card.action !== 'leads');
+  }
   return <div style={gridStyle || styles.metricGrid}>
       {cards.map(card => <div key={card.title} onClick={e => {
       if (card.action === 'contacts') this.openContactList();
@@ -2416,7 +2510,7 @@ export function renderProjectItem(item) {
     </div>;
 }
 export function renderMaintenancePanel(isMobile) {
-  if (!_customState.maintenanceOpen) return null;
+  if (!_customState.maintenanceOpen || !this.isHighLevelRole()) return null;
   var total = this.getClearDataTotal();
   var disabled = _customState.clearDataScanning || _customState.clearDataRunning;
   var canClear = _customState.clearConfirmText === CLEAR_DATA_CONFIRM_TEXT && total > 0 && !disabled;
